@@ -116,6 +116,17 @@ void applyZDoomPerSectionOffsets(
 	*xoff *= fabs(*sx);
 	*yoff *= fabs(*sy);
 }
+
+Vec2d thingSpriteWidthDir(const MapThing* thing, const MapRenderer3D::Thing& thing_info, const Vec3d& cam_strafe)
+{
+	if (thing && thing_info.type && thing_info.type->wallSprite() && !(thing_info.flags & MapRenderer3D::ICON))
+	{
+		auto facing = math::vectorAngle(math::degToRad(thing->angle()));
+		return { -facing.y, facing.x };
+	}
+
+	return cam_strafe.get2d();
+}
 } // namespace
 
 
@@ -2431,7 +2442,7 @@ void MapRenderer3D::updateThing(unsigned index, const MapThing* thing)
 	things_[index].sector = map_->sectors().atPos(thing->position());
 
 	// Get sprite texture
-	uint32_t theight      = render_thing_icon_size;
+	double theight        = render_thing_icon_size;
 	things_[index].sprite = mapeditor::textureManager()
 								.sprite(
 									things_[index].type->sprite(),
@@ -2501,7 +2512,8 @@ void MapRenderer3D::updateThing(unsigned index, const MapThing* thing)
 	}
 
 	// Adjust height by sprite Y offset if needed
-	things_[index].z += mapeditor::textureManager().verticalOffset(things_[index].type->sprite());
+	things_[index].z += mapeditor::textureManager().verticalOffset(things_[index].type->sprite())
+		* things_[index].type->scaleY();
 
 	things_[index].updated_time = app::runTimer();
 }
@@ -2574,10 +2586,11 @@ void MapRenderer3D::renderThings()
 			halfwidth = render_thing_icon_size * 0.5;
 			theight   = render_thing_icon_size;
 		}
-		x1                = thing->xPos() - cam_strafe_.x * halfwidth;
-		y1                = thing->yPos() - cam_strafe_.y * halfwidth;
-		x2                = thing->xPos() + cam_strafe_.x * halfwidth;
-		y2                = thing->yPos() + cam_strafe_.y * halfwidth;
+		auto width_dir    = thingSpriteWidthDir(thing, things_[a], cam_strafe_);
+		x1                = thing->xPos() - width_dir.x * halfwidth;
+		y1                = thing->yPos() - width_dir.y * halfwidth;
+		x2                = thing->xPos() + width_dir.x * halfwidth;
+		y2                = thing->yPos() + width_dir.y * halfwidth;
 		things_[a].height = theight;
 
 		// Set colour/brightness
@@ -2795,17 +2808,18 @@ void MapRenderer3D::renderThingSelection(const ItemSelection& selection, float a
 
 		// Determine coordinates
 		auto& tex_info = gl::Texture::info(things_[item.index].sprite);
-		halfwidth      = tex_info.size.x * 0.5;
-		theight        = tex_info.size.y;
+		halfwidth      = things_[item.index].type->scaleX() * tex_info.size.x * 0.5;
+		theight        = things_[item.index].type->scaleY() * tex_info.size.y;
 		if (things_[item.index].flags & ICON)
 		{
 			halfwidth = render_thing_icon_size * 0.5;
 			theight   = render_thing_icon_size;
 		}
-		x1 = thing->xPos() - cam_strafe_.x * halfwidth;
-		y1 = thing->yPos() - cam_strafe_.y * halfwidth;
-		x2 = thing->xPos() + cam_strafe_.x * halfwidth;
-		y2 = thing->yPos() + cam_strafe_.y * halfwidth;
+		auto width_dir = thingSpriteWidthDir(thing, things_[item.index], cam_strafe_);
+		x1             = thing->xPos() - width_dir.x * halfwidth;
+		y1             = thing->yPos() - width_dir.y * halfwidth;
+		x2             = thing->xPos() + width_dir.x * halfwidth;
+		y2             = thing->yPos() + width_dir.y * halfwidth;
 
 		// Render outline
 		double z = things_[item.index].z;
@@ -3325,21 +3339,22 @@ mapeditor::Item MapRenderer3D::determineHilight()
 
 		// Find distance to thing sprite
 		auto& tex_info = gl::Texture::info(things_[a].sprite);
-		halfwidth      = tex_info.size.x * 0.5;
+		halfwidth      = things_[a].type->scaleX() * tex_info.size.x * 0.5;
 		if (things_[a].flags & ICON)
 			halfwidth = render_thing_icon_size * 0.5;
-		dist = math::distanceRayLine(
+		auto width_dir = thingSpriteWidthDir(thing, things_[a], cam_strafe_);
+		dist           = math::distanceRayLine(
 			cam_position_.get2d(),
 			(cam_position_ + cam_dir3d_).get2d(),
-			thing->position() - cam_strafe_.get2d() * halfwidth,
-			thing->position() + cam_strafe_.get2d() * halfwidth);
+			thing->position() - width_dir * halfwidth,
+			thing->position() + width_dir * halfwidth);
 
 		// Ignore if no intersection or something was closer
 		if (dist < 0 || dist >= min_dist)
 			continue;
 
 		// Check intersection height
-		theight = tex_info.size.y;
+		theight = things_[a].type->scaleY() * tex_info.size.y;
 		height  = cam_position_.z + cam_dir3d_.z * dist;
 		if (things_[a].flags & ICON)
 			theight = render_thing_icon_size;
@@ -3531,10 +3546,11 @@ void MapRenderer3D::renderHilight(mapeditor::Item hilight, float alpha)
 			halfwidth = render_thing_icon_size * 0.5;
 			theight   = render_thing_icon_size;
 		}
-		x1 = thing->xPos() - cam_strafe_.x * halfwidth;
-		y1 = thing->yPos() - cam_strafe_.y * halfwidth;
-		x2 = thing->xPos() + cam_strafe_.x * halfwidth;
-		y2 = thing->yPos() + cam_strafe_.y * halfwidth;
+		auto width_dir = thingSpriteWidthDir(thing, things_[hilight.index], cam_strafe_);
+		x1             = thing->xPos() - width_dir.x * halfwidth;
+		y1             = thing->yPos() - width_dir.y * halfwidth;
+		x2             = thing->xPos() + width_dir.x * halfwidth;
+		y2             = thing->yPos() + width_dir.y * halfwidth;
 
 		// Render outline of sprite
 		double z = things_[hilight.index].z;

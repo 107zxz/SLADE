@@ -238,6 +238,14 @@ void MapEditContext::setEditMode(Mode mode)
 		KeyBind::releaseAll();
 		lockMouse(true);
 		renderer_.renderer3D().refresh();
+
+		// Menu actions can restore focus to the menu after this method returns.
+		// Defer focusing the canvas so it receives keyboard input (notably Escape).
+		auto canvas = canvas_;
+		canvas_->CallAfter([canvas] {
+			canvas->SetFocusFromKbd();
+			canvas->SetFocus();
+		});
 	}
 	mapeditor::window()->refreshToolBar();
 }
@@ -1709,8 +1717,6 @@ bool MapEditContext::handleAction(string_view id)
 	// 3d mode
 	else if (id == "mapw_mode_3d")
 	{
-		canvas_->SetFocusFromKbd();
-		canvas_->SetFocus();
 		setEditMode(Mode::Visual);
 		return true;
 	}

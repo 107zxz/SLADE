@@ -42,6 +42,7 @@ namespace game
 		bool           hanging() const { return hanging_; }
 		bool           fullbright() const { return fullbright_; }
 		bool           shrinkOnZoom() const { return shrink_; }
+		bool           wallSprite() const { return wallsprite_; }
 		bool           decoration() const { return decoration_; }
 		bool           solid() const { return solid_; }
 		int            zethIcon() const { return zeth_icon_; }
@@ -84,6 +85,7 @@ namespace game
 		bool    hanging_    = false;
 		bool    shrink_     = false;
 		bool    fullbright_ = false;
+		bool    wallsprite_ = false;
 		bool    decoration_ = false;
 		int     zeth_icon_  = -1;
 		string  sprite_;

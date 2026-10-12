@@ -504,6 +504,7 @@ void SIFormat::initFormats()
 	simage_formats.clear(); // Remove previously created formats from the list
 
 	// Image formats
+	new SIFAse();
 	new SIFPng();
 
 	// Doom formats

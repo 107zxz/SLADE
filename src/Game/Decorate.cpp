@@ -341,6 +341,10 @@ void parseDecorateActor(Tokenizer& tz, std::map<int, ThingType>& types, vector<T
 			else if (tz.checkNC("+bright"))
 				found_props["bright"] = true;
 
+			// Wall sprite
+			else if (tz.checkNC("+wallsprite"))
+				found_props["wallsprite"] = true;
+
 			// Translation
 			else if (tz.checkNC("translation"))
 			{

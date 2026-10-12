@@ -941,11 +941,18 @@ bool Class::parseDefaults(vector<ParsedStatement>& defaults)
 		}
 
 		// Value
-		// For now ignore anything after the first whitespace/special character
-		// so stuff like arithmetic expressions or comma separated lists won't
-		// really work properly yet
+		// Keep the full token sequence after the property name so values such as
+		// floating point literals (eg. 0.5) survive tokenization, where '.' is a
+		// special character. This still won't evaluate expressions, but it at
+		// least preserves their textual form.
 		if (t + 1 < count)
-			default_properties_[strutil::lower(name)] = statement.tokens[t + 1];
+		{
+			string value;
+			for (unsigned v = t + 1; v < count; ++v)
+				value += statement.tokens[v];
+
+			default_properties_[strutil::lower(name)] = value;
+		}
 
 		// Name only (no value), set as boolean true
 		else if (t < count)

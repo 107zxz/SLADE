@@ -79,6 +79,7 @@ void ThingType::copy(const ThingType& copy)
 	height_            = copy.height_;
 	scale_             = copy.scale_;
 	fullbright_        = copy.fullbright_;
+	wallsprite_        = copy.wallsprite_;
 	decoration_        = copy.decoration_;
 	decorate_          = copy.decorate_;
 	solid_             = copy.solid_;
@@ -121,6 +122,7 @@ void ThingType::reset()
 	angled_            = true;
 	hanging_           = false;
 	shrink_            = false;
+	wallsprite_        = false;
 	colour_            = ColRGBA::WHITE;
 	radius_            = 20;
 	height_            = -1;
@@ -225,6 +227,10 @@ void ThingType::parse(ParseTreeNode* node)
 		// Fullbright
 		else if (name == "fullbright")
 			fullbright_ = child->boolValue();
+
+		// Wall sprite
+		else if (name == "wallsprite")
+			wallsprite_ = child->boolValue();
 
 		// Decoration
 		else if (name == "decoration")
@@ -359,6 +365,8 @@ string ThingType::stringDesc() const
 		ret += ", hanging";
 	if (fullbright_)
 		ret += ", fullbright";
+	if (wallsprite_)
+		ret += ", wall sprite";
 	if (decoration_)
 		ret += ", decoration";
 	if (decorate_)
@@ -374,11 +382,40 @@ string ThingType::stringDesc() const
 // -----------------------------------------------------------------------------
 void ThingType::loadProps(PropertyList& props, bool decorate, bool zscript)
 {
+	auto prop_string = [&props](string_view key) -> std::optional<string>
+	{
+		if (auto val = props.getIf(key))
+			return property::asString(*val);
+
+		return {};
+	};
+	auto prop_int = [&props](string_view key) -> std::optional<int>
+	{
+		if (auto val = props.getIf(key))
+			return property::asInt(*val);
+
+		return {};
+	};
+	auto prop_float = [&props](string_view key) -> std::optional<double>
+	{
+		if (auto val = props.getIf(key))
+			return property::asFloat(*val);
+
+		return {};
+	};
+	auto prop_bool = [&props](string_view key) -> std::optional<bool>
+	{
+		if (auto val = props.getIf(key))
+			return property::asBool(*val);
+
+		return {};
+	};
+
 	// Set decorate flag
 	decorate_ = decorate;
 
 	// Sprite
-	if (auto sprite = props.getIf<string>("sprite"))
+	if (auto sprite = prop_string("sprite"))
 	{
 		if (strutil::equalCI(*sprite, "tnt1a?"))
 		{
@@ -390,14 +427,14 @@ void ThingType::loadProps(PropertyList& props, bool decorate, bool zscript)
 	}
 
 	// Colour
-	if (auto colour = props.getIf<string>("colour"))
+	if (auto colour = prop_string("colour"))
 	{
 		// SLADE Colour
 		wxColour wxc(wxString::FromUTF8(*colour));
 		if (wxc.IsOk())
 			colour_.set(wxc);
 	}
-	else if (auto color = props.getIf<int>("color"))
+	else if (auto color = prop_int("color"))
 	{
 		// Translate DB2 color indices to RGB values
 		static vector<ColRGBA> db2_colours{
@@ -428,41 +465,43 @@ void ThingType::loadProps(PropertyList& props, bool decorate, bool zscript)
 	}
 
 	// Other props
-	if (auto val = props.getIf<int>("radius"))
+	if (auto val = prop_int("radius"))
 		radius_ = *val;
-	if (auto val = props.getIf<int>("height"))
+	if (auto val = prop_int("height"))
 		height_ = *val;
-	if (auto val = props.getIf<double>("scalex"))
+	if (auto val = prop_float("scalex"))
 		scale_.x = *val;
-	if (auto val = props.getIf<double>("scaley"))
+	if (auto val = prop_float("scaley"))
 		scale_.y = *val;
-	if (auto val = props.getIf<bool>("hanging"))
+	if (auto val = prop_bool("hanging"))
 		hanging_ = *val;
-	if (auto val = props.getIf<bool>("angled"))
+	if (auto val = prop_bool("angled"))
 		angled_ = *val;
-	if (auto val = props.getIf<bool>("bright"))
+	if (auto val = prop_bool("bright"))
 		fullbright_ = *val;
-	if (auto val = props.getIf<bool>("decoration"))
+	if (auto val = prop_bool("wallsprite"))
+		wallsprite_ = *val;
+	if (auto val = prop_bool("decoration"))
 		decoration_ = *val;
-	if (auto val = props.getIf<string>("icon"))
+	if (auto val = prop_string("icon"))
 		icon_ = *val;
-	if (auto val = props.getIf<string>("translation"))
+	if (auto val = prop_string("translation"))
 		translation_ = *val;
-	if (auto val = props.getIf<bool>("solid"))
+	if (auto val = prop_bool("solid"))
 		solid_ = *val;
-	if (auto val = props.getIf<bool>("obsolete"))
+	if (auto val = prop_bool("obsolete"); val && *val)
 		flags_ |= Obsolete;
 
 	// ZScript-only props
 	if (zscript)
 	{
-		if (auto val = props.getIf<double>("scale"))
+		if (auto val = prop_float("scale"))
 			scale_.x = scale_.y = *val;
-		if (auto val = props.getIf<double>("scale.x"))
+		if (auto val = prop_float("scale.x"))
 			scale_.x = *val;
-		if (auto val = props.getIf<double>("scale.y"))
+		if (auto val = prop_float("scale.y"))
 			scale_.y = *val;
-		if (auto val = props.getIf<bool>("spawnceiling"))
+		if (auto val = prop_bool("spawnceiling"))
 			hanging_ = *val;
 	}
 }

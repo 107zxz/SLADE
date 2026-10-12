@@ -204,6 +204,7 @@ void EntryDataFormat::initBuiltinFormats()
 	// Register each builtin format class
 	// TODO: Ugly ugly ugly, need a better way of doing this, defining each data format in a single place etc
 	registerDataFormat<PNGDataFormat>();
+	registerDataFormat<AseDataFormat>();
 	registerDataFormat<BMPDataFormat>();
 	registerDataFormat<GIFDataFormat>();
 	registerDataFormat<PCXDataFormat>();

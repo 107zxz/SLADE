@@ -23,6 +23,33 @@ public:
 	}
 };
 
+class AseDataFormat : public EntryDataFormat
+{
+public:
+	AseDataFormat() : EntryDataFormat("img_ase") {}
+	~AseDataFormat() = default;
+
+	int isThisFormat(MemChunk& mc) override
+	{
+		if (mc.size() < 128)
+			return MATCH_FALSE;
+
+		const auto magic       = mc.readL16(4);
+		const auto frame_count = mc.readL16(6);
+		const auto width       = mc.readL16(8);
+		const auto height      = mc.readL16(10);
+		const auto depth       = mc.readL16(12);
+
+		if (magic != 0xA5E0 || frame_count == 0 || width == 0 || height == 0)
+			return MATCH_FALSE;
+
+		if (depth != 8 && depth != 16 && depth != 32)
+			return MATCH_FALSE;
+
+		return MATCH_TRUE;
+	}
+};
+
 class BMPDataFormat : public EntryDataFormat
 {
 public:

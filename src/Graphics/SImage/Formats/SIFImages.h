@@ -1,5 +1,6 @@
 
 #include "UI/WxUtils.h"
+#include "Utility/Compression.h"
 #include <array>
 #include <png.h>
 
@@ -75,6 +76,470 @@ private:
 	char     name_[4];
 	MemChunk data_;
 	uint32_t crc_ = 0;
+};
+
+class SIFAse : public SIFormat
+{
+public:
+	SIFAse() : SIFormat("ase", "Aseprite", "ase", 255) {}
+
+	bool isThisFormat(MemChunk& mc) override
+	{
+		if (mc.size() < 128)
+			return false;
+
+		const auto magic       = mc.readL16(4);
+		const auto frame_count = mc.readL16(6);
+		const auto width       = mc.readL16(8);
+		const auto height      = mc.readL16(10);
+		const auto depth       = mc.readL16(12);
+
+		return magic == 0xA5E0 && frame_count > 0 && width > 0 && height > 0 && (depth == 8 || depth == 16 || depth == 32);
+	}
+
+	SImage::Info info(MemChunk& mc, int index) override
+	{
+		SImage::Info inf;
+		inf.format     = "ase";
+		inf.width      = mc.readL16(8);
+		inf.height     = mc.readL16(10);
+		inf.colformat  = SImage::Type::RGBA;
+		inf.numimages  = mc.readL16(6);
+		inf.imgindex   = std::clamp(index, 0, inf.numimages - 1);
+		inf.offset_x   = inf.width / 2;
+		inf.offset_y   = inf.height;
+		inf.has_palette = false;
+		return inf;
+	}
+
+protected:
+	bool readImage(SImage& image, MemChunk& data, int index) override
+	{
+		ParsedAse parsed;
+		if (!parseAse(data, parsed))
+			return false;
+
+		if (index < 0 || index >= parsed.num_frames)
+			index = 0;
+
+		auto frame_rgba = renderFrame(parsed, index);
+		if (frame_rgba.empty())
+		{
+			global::error = "Unable to render Aseprite frame";
+			return false;
+		}
+
+		image.create(parsed.width, parsed.height, SImage::Type::RGBA, nullptr, index, parsed.num_frames);
+		image.setXOffset(parsed.width / 2);
+		image.setYOffset(parsed.height);
+		memcpy(imageData(image), frame_rgba.data(), frame_rgba.size());
+		return true;
+	}
+
+private:
+	struct AseLayer
+	{
+		uint16_t flags       = 0;
+		uint16_t type        = 0;
+		uint16_t child_level = 0;
+		uint16_t blend_mode  = 0;
+		uint8_t  opacity     = 255;
+	};
+
+	struct AseCel
+	{
+		bool            present       = false;
+		bool            linked        = false;
+		int             linked_frame  = -1;
+		int             x             = 0;
+		int             y             = 0;
+		int             width         = 0;
+		int             height        = 0;
+		uint8_t         opacity       = 255;
+		vector<uint8_t> rgba;
+	};
+
+	struct ParsedAse
+	{
+		int                      width             = 0;
+		int                      height            = 0;
+		int                      num_frames        = 0;
+		int                      colour_depth      = 0;
+		uint8_t                  transparent_index = 0;
+		std::array<ColRGBA, 256> palette;
+		bool                     has_palette = false;
+		vector<AseLayer>         layers;
+		vector<bool>             layer_visible;
+		vector<vector<AseCel>>   frame_cels;
+	};
+
+	static void ensureCelStorage(ParsedAse& parsed, size_t layer_count)
+	{
+		for (auto& frame : parsed.frame_cels)
+			if (frame.size() < layer_count)
+				frame.resize(layer_count);
+	}
+
+	bool parseAse(MemChunk& mc, ParsedAse& parsed) const
+	{
+		if (mc.size() < 128 || mc.readL16(4) != 0xA5E0)
+		{
+			global::error = "Entry is not an Aseprite file";
+			return false;
+		}
+
+		parsed.width             = mc.readL16(8);
+		parsed.height            = mc.readL16(10);
+		parsed.num_frames        = mc.readL16(6);
+		parsed.colour_depth      = mc.readL16(12);
+		parsed.transparent_index = mc[28];
+		parsed.frame_cels.resize(parsed.num_frames);
+
+		size_t offset = 128;
+		for (int frame = 0; frame < parsed.num_frames; ++frame)
+		{
+			if (offset + 16 > mc.size())
+			{
+				global::error = "Truncated Aseprite frame header";
+				return false;
+			}
+
+			auto frame_size = mc.readL32(offset);
+			if (frame_size < 16 || offset + frame_size > mc.size())
+			{
+				global::error = "Invalid Aseprite frame size";
+				return false;
+			}
+
+			if (mc.readL16(offset + 4) != 0xF1FA)
+			{
+				global::error = "Invalid Aseprite frame magic";
+				return false;
+			}
+
+			auto chunk_count = mc.readL32(offset + 12);
+			if (chunk_count == 0)
+				chunk_count = mc.readL16(offset + 6);
+
+			ensureCelStorage(parsed, parsed.layers.size());
+
+			size_t pos       = offset + 16;
+			size_t frame_end = offset + frame_size;
+			for (uint32_t chunk = 0; chunk < chunk_count; ++chunk)
+			{
+				if (pos + 6 > frame_end)
+				{
+					global::error = "Truncated Aseprite chunk header";
+					return false;
+				}
+
+				auto chunk_size = mc.readL32(pos);
+				auto chunk_type = mc.readL16(pos + 4);
+				if (chunk_size < 6 || pos + chunk_size > frame_end)
+				{
+					global::error = "Invalid Aseprite chunk size";
+					return false;
+				}
+
+				auto chunk_pos = pos + 6;
+				auto chunk_end = pos + chunk_size;
+				switch (chunk_type)
+				{
+				case 0x2004:
+				{
+					if (chunk_end - chunk_pos < 16)
+						break;
+
+					AseLayer layer;
+					layer.flags       = mc.readL16(chunk_pos);
+					layer.type        = mc.readL16(chunk_pos + 2);
+					layer.child_level = mc.readL16(chunk_pos + 4);
+					layer.blend_mode  = mc.readL16(chunk_pos + 10);
+					layer.opacity     = mc[chunk_pos + 12];
+					parsed.layers.push_back(layer);
+					ensureCelStorage(parsed, parsed.layers.size());
+					break;
+				}
+				case 0x2005:
+				{
+					if (chunk_end - chunk_pos < 16)
+						break;
+
+					auto layer_index = mc.readL16(chunk_pos);
+					if (parsed.layers.size() <= layer_index)
+					{
+						parsed.layers.resize(layer_index + 1);
+						ensureCelStorage(parsed, parsed.layers.size());
+					}
+
+					auto& cel     = parsed.frame_cels[frame][layer_index];
+					cel.present   = true;
+					cel.linked    = false;
+					cel.x         = static_cast<int16_t>(mc.readL16(chunk_pos + 2));
+					cel.y         = static_cast<int16_t>(mc.readL16(chunk_pos + 4));
+					cel.opacity   = mc[chunk_pos + 6];
+					auto cel_type = mc.readL16(chunk_pos + 7);
+					auto p        = chunk_pos + 16;
+
+					if (cel_type == 1)
+					{
+						if (p + 2 > chunk_end)
+							break;
+						cel.linked       = true;
+						cel.linked_frame = mc.readL16(p);
+					}
+					else if (cel_type == 0 || cel_type == 2)
+					{
+						if (p + 4 > chunk_end)
+							break;
+
+						cel.width  = mc.readL16(p);
+						cel.height = mc.readL16(p + 2);
+						p += 4;
+
+						const size_t bpp          = parsed.colour_depth == 32 ? 4 : parsed.colour_depth == 16 ? 2 : 1;
+						const size_t decoded_size = static_cast<size_t>(cel.width) * cel.height * bpp;
+						if (cel.width <= 0 || cel.height <= 0 || decoded_size == 0)
+							break;
+
+						MemChunk pixel_data;
+						if (cel_type == 0)
+						{
+							if (p + decoded_size > chunk_end)
+								break;
+							pixel_data.importMem(mc.data() + p, decoded_size);
+						}
+						else
+						{
+							MemChunk compressed;
+							compressed.importMem(mc.data() + p, chunk_end - p);
+							if (!compression::zlibInflate(compressed, pixel_data, decoded_size))
+							{
+								global::error = "Unable to decompress Aseprite cel data";
+								return false;
+							}
+						}
+
+						if (!decodeCel(pixel_data, parsed, cel))
+							return false;
+					}
+					break;
+				}
+				case 0x2019:
+				{
+					if (chunk_end - chunk_pos < 20)
+						break;
+
+					auto first = mc.readL32(chunk_pos + 4);
+					auto last  = mc.readL32(chunk_pos + 8);
+					auto p     = chunk_pos + 20;
+					for (uint32_t c = first; c <= last && c < parsed.palette.size() && p + 6 <= chunk_end; ++c)
+					{
+						auto flags = mc.readL16(p);
+						p += 2;
+						parsed.palette[c] = ColRGBA(mc[p], mc[p + 1], mc[p + 2], mc[p + 3]);
+						parsed.has_palette = true;
+						p += 4;
+						if ((flags & 1) && p + 2 <= chunk_end)
+						{
+							auto name_len = mc.readL16(p);
+							p += 2 + name_len;
+							if (p > chunk_end)
+								break;
+						}
+					}
+					break;
+				}
+				default: break;
+				}
+
+				pos += chunk_size;
+			}
+
+			offset += frame_size;
+		}
+
+		computeLayerVisibility(parsed);
+		return true;
+	}
+
+	static void computeLayerVisibility(ParsedAse& parsed)
+	{
+		parsed.layer_visible.clear();
+		parsed.layer_visible.resize(parsed.layers.size(), true);
+
+		vector<bool> group_visible_stack;
+		for (size_t i = 0; i < parsed.layers.size(); ++i)
+		{
+			const auto& layer = parsed.layers[i];
+			while (group_visible_stack.size() > layer.child_level)
+				group_visible_stack.pop_back();
+
+			const bool parent_visible = group_visible_stack.empty() ? true : group_visible_stack.back();
+			const bool visible        = parent_visible && (layer.flags & 1) != 0;
+			parsed.layer_visible[i]   = visible;
+			if (layer.type == 1)
+				group_visible_stack.push_back(visible);
+		}
+	}
+
+	bool decodeCel(MemChunk& pixel_data, const ParsedAse& parsed, AseCel& cel) const
+	{
+		cel.rgba.clear();
+		cel.rgba.resize(static_cast<size_t>(cel.width) * cel.height * 4, 0);
+
+		if (parsed.colour_depth == 32)
+		{
+			if (pixel_data.size() < cel.rgba.size())
+			{
+				global::error = "Truncated Aseprite RGBA cel data";
+				return false;
+			}
+
+			memcpy(cel.rgba.data(), pixel_data.data(), cel.rgba.size());
+			return true;
+		}
+		else if (parsed.colour_depth == 16)
+		{
+			const size_t npixels = static_cast<size_t>(cel.width) * cel.height;
+			if (pixel_data.size() < npixels * 2)
+			{
+				global::error = "Truncated Aseprite grayscale cel data";
+				return false;
+			}
+
+			for (size_t i = 0; i < npixels; ++i)
+			{
+				auto value             = pixel_data[i * 2];
+				cel.rgba[i * 4]     = value;
+				cel.rgba[i * 4 + 1] = value;
+				cel.rgba[i * 4 + 2] = value;
+				cel.rgba[i * 4 + 3] = pixel_data[i * 2 + 1];
+			}
+			return true;
+		}
+		else if (parsed.colour_depth == 8)
+		{
+			const size_t npixels = static_cast<size_t>(cel.width) * cel.height;
+			if (pixel_data.size() < npixels)
+			{
+				global::error = "Truncated Aseprite indexed cel data";
+				return false;
+			}
+			if (!parsed.has_palette)
+			{
+				global::error = "Indexed Aseprite file has no palette";
+				return false;
+			}
+
+			for (size_t i = 0; i < npixels; ++i)
+			{
+				auto index = pixel_data[i];
+				auto col   = parsed.palette[index];
+				if (index == parsed.transparent_index)
+					col.a = 0;
+				cel.rgba[i * 4]     = col.r;
+				cel.rgba[i * 4 + 1] = col.g;
+				cel.rgba[i * 4 + 2] = col.b;
+				cel.rgba[i * 4 + 3] = col.a;
+			}
+			return true;
+		}
+
+		global::error = "Unsupported Aseprite colour depth";
+		return false;
+	}
+
+	const AseCel* resolveCel(const ParsedAse& parsed, int frame, size_t layer) const
+	{
+		const AseCel* cel = &parsed.frame_cels[frame][layer];
+		for (int guard = 0; guard < parsed.num_frames; ++guard)
+		{
+			if (!cel->linked)
+				return cel->present ? cel : nullptr;
+			if (cel->linked_frame < 0 || cel->linked_frame >= parsed.num_frames)
+				return nullptr;
+			cel = &parsed.frame_cels[cel->linked_frame][layer];
+		}
+		return nullptr;
+	}
+
+	static void blendPixel(uint8_t* dst, const uint8_t* src, uint8_t opacity)
+	{
+		const int sa = (src[3] * opacity + 127) / 255;
+		if (sa <= 0)
+			return;
+		if (sa >= 255 && dst[3] == 0)
+		{
+			dst[0] = src[0];
+			dst[1] = src[1];
+			dst[2] = src[2];
+			dst[3] = 255;
+			return;
+		}
+
+		const int da   = dst[3];
+		const int outa = sa + ((da * (255 - sa) + 127) / 255);
+		if (outa <= 0)
+			return;
+
+		const int src_r = src[0] * sa;
+		const int src_g = src[1] * sa;
+		const int src_b = src[2] * sa;
+		const int dst_r = (dst[0] * da * (255 - sa) + 127) / 255;
+		const int dst_g = (dst[1] * da * (255 - sa) + 127) / 255;
+		const int dst_b = (dst[2] * da * (255 - sa) + 127) / 255;
+
+		dst[0] = static_cast<uint8_t>((src_r + dst_r) / outa);
+		dst[1] = static_cast<uint8_t>((src_g + dst_g) / outa);
+		dst[2] = static_cast<uint8_t>((src_b + dst_b) / outa);
+		dst[3] = static_cast<uint8_t>(outa);
+	}
+
+	vector<uint8_t> renderFrame(const ParsedAse& parsed, int frame) const
+	{
+		vector<uint8_t> rgba(static_cast<size_t>(parsed.width) * parsed.height * 4, 0);
+
+		if (frame < 0 || frame >= parsed.num_frames)
+			return rgba;
+
+		for (size_t layer = 0; layer < parsed.layers.size(); ++layer)
+		{
+			if (layer >= parsed.frame_cels[frame].size() || !parsed.layer_visible[layer])
+				continue;
+
+			const auto& cel = parsed.frame_cels[frame][layer];
+			if (!cel.present)
+				continue;
+
+			auto* source = resolveCel(parsed, frame, layer);
+			if (!source || source->rgba.empty() || source->width <= 0 || source->height <= 0)
+				continue;
+
+			const auto& layer_info = parsed.layers[layer];
+			const auto  opacity    = static_cast<uint8_t>((cel.opacity * layer_info.opacity + 127) / 255);
+
+			for (int y = 0; y < source->height; ++y)
+			{
+				const int dy = cel.y + y;
+				if (dy < 0 || dy >= parsed.height)
+					continue;
+
+				for (int x = 0; x < source->width; ++x)
+				{
+					const int dx = cel.x + x;
+					if (dx < 0 || dx >= parsed.width)
+						continue;
+
+					auto*       dst = rgba.data() + (static_cast<size_t>(dy) * parsed.width + dx) * 4;
+					const auto* src = source->rgba.data() + (static_cast<size_t>(y) * source->width + x) * 4;
+					blendPixel(dst, src, opacity);
+				}
+			}
+		}
+
+		return rgba;
+	}
 };
 
 // TODO: Keep PNG chunks in SImage so they are preserved between load/save
