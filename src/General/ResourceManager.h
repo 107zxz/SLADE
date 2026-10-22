@@ -98,7 +98,11 @@ public:
 	void putAllFlatNames(vector<string>& list) const;
 
 	ArchiveEntry* getPaletteEntry(string_view palette, const Archive* priority = nullptr);
-	ArchiveEntry* getPatchEntry(string_view patch, string_view nspace = "patches", const Archive* priority = nullptr);
+	ArchiveEntry* getPatchEntry(
+		string_view    patch,
+		string_view    nspace      = "patches",
+		const Archive* priority    = nullptr,
+		int*           image_index = nullptr);
 	ArchiveEntry* getFlatEntry(string_view flat, const Archive* priority = nullptr);
 	ArchiveEntry* getTextureEntry(
 		string_view    texture,
@@ -106,10 +110,10 @@ public:
 		const Archive* priority = nullptr);
 	ArchiveEntry* getHiresEntry(string_view texture, const Archive* priority = nullptr);
 	CTexture*     getTexture(
-			string_view    texture,
-			string_view    type     = {},
-			const Archive* priority = nullptr,
-			const Archive* ignore   = nullptr);
+		string_view    texture,
+		string_view    type     = {},
+		const Archive* priority = nullptr,
+		const Archive* ignore   = nullptr);
 	uint16_t getTextureHash(string_view name) const;
 
 	// Signals

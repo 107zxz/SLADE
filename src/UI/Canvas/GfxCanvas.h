@@ -66,6 +66,7 @@ public:
 	void generateBrushShadow();
 
 	void zoomToFit(bool mag = true, double padding = 0.0f);
+	void centerOnImageBounds();
 	void resetOffsets() { offset_.x = offset_.y = 0; }
 
 	bool  onImage(int x, int y) const;

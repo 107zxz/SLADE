@@ -164,6 +164,7 @@ wxPanel* ZTextureEditorPanel::createTextureControls(wxWindow* parent)
 	cb_blend_rgba_->Show(true);
 	choice_viewtype_->SetSelection(tx_offset_type);
 	tex_canvas_->setViewType(view_types[tx_offset_type]);
+	tex_canvas_->centerOnTextureBounds();
 	choice_viewtype_->Show(true);
 	label_viewtype_->Show(true);
 
@@ -261,7 +262,7 @@ wxPanel* ZTextureEditorPanel::createPatchControls(wxWindow* parent)
 	const auto     spinsize  = wxSize{ ui::px(ui::Size::SpinCtrlWidth), -1 };
 	constexpr auto spinflags = wxSP_ARROW_KEYS | wxALIGN_RIGHT | wxTE_PROCESS_ENTER;
 	spin_patch_left_         = new wxSpinCtrl(
-        frame, -1, wxEmptyString, wxDefaultPosition, spinsize, spinflags, SHRT_MIN, SHRT_MAX);
+		frame, -1, wxEmptyString, wxDefaultPosition, spinsize, spinflags, SHRT_MIN, SHRT_MAX);
 	gb_sizer->Add(new wxStaticText(frame, -1, wxS("X Position:")), { 0, 0 }, { 1, 1 }, wxALIGN_CENTER_VERTICAL);
 	gb_sizer->Add(spin_patch_left_, { 0, 1 }, { 1, 1 }, wxEXPAND);
 
@@ -529,7 +530,7 @@ void ZTextureEditorPanel::replacePatch()
 	// Browse for patch
 	tx_editor_->setFullPath(true);
 	ignore_drag_ = true;
-	auto patch = tx_editor_->browsePatchEntry();
+	auto patch   = tx_editor_->browsePatchEntry();
 	if (!patch.empty())
 	{
 		// Go through selection and replace each patch
@@ -597,6 +598,7 @@ void ZTextureEditorPanel::onChoiceViewTypeSelected(wxCommandEvent& e)
 	// Set offset type
 	tx_offset_type = choice_viewtype_->GetSelection();
 	tex_canvas_->setViewType(view_types[choice_viewtype_->GetSelection()]);
+	tex_canvas_->centerOnTextureBounds();
 
 	// Update UI
 	tex_canvas_->redraw(false);

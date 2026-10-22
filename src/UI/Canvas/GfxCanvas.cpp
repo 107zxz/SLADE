@@ -327,6 +327,33 @@ void GfxCanvas::zoomToFit(bool mag, double padding)
 }
 
 // -----------------------------------------------------------------------------
+// Centers the image bounds in the canvas without changing its offset view mode
+// -----------------------------------------------------------------------------
+void GfxCanvas::centerOnImageBounds()
+{
+	const wxSize size   = GetSize() * GetContentScaleFactor();
+	const double yscale = scale_ * (gfx_arc ? 1.2 : 1);
+
+	switch (view_type_)
+	{
+	case View::Default:
+		offset_.x = (size.x - image_.width() * scale_) * 0.5;
+		offset_.y = (size.y - image_.height() * yscale) * 0.5;
+		break;
+	case View::Centered: offset_ = {}; break;
+	case View::Sprite:
+		offset_.x = (image_.offset().x - image_.width() * 0.5) * scale_;
+		offset_.y = (image_.offset().y - image_.height() * 0.5) * yscale;
+		break;
+	case View::HUD:
+		offset_.x = (image_.offset().x + image_.width() * 0.5 - 160) * scale_;
+		offset_.y = (image_.offset().y + image_.height() * 0.5 - 100) * yscale;
+		break;
+	case View::Tiled: offset_ = {}; break;
+	}
+}
+
+// -----------------------------------------------------------------------------
 // Returns true if the given coordinates are 'on' top of the image
 // -----------------------------------------------------------------------------
 bool GfxCanvas::onImage(int x, int y) const

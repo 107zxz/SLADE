@@ -663,8 +663,15 @@ ArchiveEntry* ResourceManager::getPaletteEntry(string_view palette, const Archiv
 // Returns the most appropriate managed resource entry for [patch],
 // or nullptr if no match found
 // -----------------------------------------------------------------------------
-ArchiveEntry* ResourceManager::getPatchEntry(string_view patch, string_view nspace, const Archive* priority)
+ArchiveEntry* ResourceManager::getPatchEntry(
+	string_view    patch,
+	string_view    nspace,
+	const Archive* priority,
+	int*           image_index)
 {
+	if (image_index)
+		*image_index = 0;
+
 	// Are we wanting to use a flat as a patch?
 	if (strutil::equalCI(nspace, "flats"))
 		return getFlatEntry(patch, priority);
@@ -681,6 +688,33 @@ ArchiveEntry* ResourceManager::getPatchEntry(string_view patch, string_view nspa
 	entry = patches_fp_[patch_upper].getEntry(priority, nspace, true);
 	if (entry)
 		return entry;
+
+	// Aseprite sprite resources represent their first sprite frame in the file
+	// name (eg. ABBYA0.ase), while further frames are exposed as consecutive
+	// sprite names (ABBYB0, ABBYC0, ...). Resolve those names to the first-frame
+	// resource and return the corresponding Aseprite animation frame index.
+	if (image_index && patch_upper.size() >= 6 && std::isalpha(static_cast<unsigned char>(patch_upper[4]))
+		&& std::isdigit(static_cast<unsigned char>(patch_upper[5])))
+	{
+		auto       ase_name  = patch_upper;
+		const auto ase_frame = ase_name[4] - 'A';
+		ase_name[4]          = 'A';
+		auto* ase_entry      = patches_[strutil::truncate(ase_name, 8)].getEntry(priority, nspace, true);
+		if (!ase_entry)
+			ase_entry = patches_fp_[ase_name].getEntry(priority, nspace, true);
+		if (ase_entry && ase_entry->type()->formatId() == "img_ase"
+			&& strutil::equalCI(ase_entry->upperNameNoExt(), ase_name))
+		{
+			const auto* data        = ase_entry->rawData();
+			const auto  frame_count = static_cast<int>(data[6] | (data[7] << 8));
+			if (ase_frame >= frame_count)
+				return nullptr;
+
+			if (image_index)
+				*image_index = ase_frame;
+			return ase_entry;
+		}
+	}
 
 	return nullptr;
 }

@@ -41,6 +41,7 @@
 #include "EntryPanel/AudioEntryPanel.h"
 #include "EntryPanel/DataEntryPanel.h"
 #include "EntryPanel/DefaultEntryPanel.h"
+#include "EntryPanel/FighterEntryPanel.h"
 #include "EntryPanel/GfxEntryPanel.h"
 #include "EntryPanel/HexEntryPanel.h"
 #include "EntryPanel/MapEntryPanel.h"
@@ -2926,6 +2927,8 @@ bool ArchivePanel::openEntry(ArchiveEntry* entry, bool force)
 			new_area = mapArea();
 		else if (entry->type()->editor() == "gfx")
 			new_area = gfxArea();
+		else if (entry->type()->editor() == "fighter")
+			new_area = fighterArea();
 		else if (entry->type()->editor() == "palette")
 			new_area = palArea();
 		else if (entry->type()->editor() == "ansi")
@@ -3495,6 +3498,8 @@ EntryPanel* ArchivePanel::createPanelForEntry(const ArchiveEntry* entry, wxWindo
 		entry_panel = new MapEntryPanel(parent);
 	else if (entry->type()->editor() == "gfx")
 		entry_panel = new GfxEntryPanel(parent);
+	else if (entry->type()->editor() == "fighter")
+		entry_panel = new FighterEntryPanel(parent);
 	else if (entry->type()->editor() == "palette")
 		entry_panel = new PaletteEntryPanel(parent);
 	else if (entry->type()->editor() == "ansi")
@@ -3703,6 +3708,14 @@ EntryPanel* ArchivePanel::dataArea()
 		data_area_ = new DataEntryPanel(splitter_);
 
 	return data_area_;
+}
+
+EntryPanel* ArchivePanel::fighterArea()
+{
+	if (fighter_area_ == nullptr)
+		fighter_area_ = new FighterEntryPanel(splitter_);
+
+	return fighter_area_;
 }
 
 

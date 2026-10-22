@@ -157,6 +157,8 @@ void TextureEditorPanel::setupLayout()
 	tex_canvas_->Bind(wxEVT_MOTION, &TextureEditorPanel::onTexCanvasMouseEvent, this);
 	tex_canvas_->Bind(EVT_DRAG_END, &TextureEditorPanel::onTexCanvasDragEnd, this);
 	tex_canvas_->Bind(wxEVT_KEY_DOWN, &TextureEditorPanel::onTexCanvasKeyDown, this);
+	cb_tex_scale_->Bind(wxEVT_CHECKBOX, &TextureEditorPanel::onApplyScaleChanged, this);
+	cb_tex_arc_->Bind(wxEVT_CHECKBOX, &TextureEditorPanel::onARCChanged, this);
 	text_tex_name_->Bind(wxEVT_TEXT, &TextureEditorPanel::onTexNameChanged, this);
 	spin_tex_width_->Bind(wxEVT_SPINCTRL, &TextureEditorPanel::onTexWidthChanged, this);
 	spin_tex_height_->Bind(wxEVT_SPINCTRL, &TextureEditorPanel::onTexHeightChanged, this);
@@ -431,6 +433,7 @@ bool TextureEditorPanel::openTexture(const CTexture* tex, TextureXList* list)
 
 	// Open texture in canvas
 	tex_canvas_->openTexture(tex_current_.get(), tx_editor_->archive());
+	tex_canvas_->centerOnTextureBounds();
 
 	// Set control values
 	updateTextureControls();
@@ -638,7 +641,7 @@ void TextureEditorPanel::replacePatch()
 	// Browse for patch
 	tx_editor_->setFullPath(false);
 	ignore_drag_ = true;
-	int patch   = tx_editor_->browsePatchTable(pname);
+	int patch    = tx_editor_->browsePatchTable(pname);
 	if (patch >= 0)
 	{
 		// Go through selection and replace each patch
@@ -1202,6 +1205,7 @@ void TextureEditorPanel::onApplyScaleChanged(wxCommandEvent& e)
 {
 	tx_apply_scale = cb_tex_scale_->GetValue();
 	tex_canvas_->applyTexScale(cb_tex_scale_->GetValue());
+	tex_canvas_->centerOnTextureBounds();
 	tex_canvas_->redraw();
 }
 
@@ -1211,5 +1215,6 @@ void TextureEditorPanel::onApplyScaleChanged(wxCommandEvent& e)
 void TextureEditorPanel::onARCChanged(wxCommandEvent& e)
 {
 	tx_arc = cb_tex_arc_->IsChecked();
+	tex_canvas_->centerOnTextureBounds();
 	tex_canvas_->redraw();
 }

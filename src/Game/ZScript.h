@@ -135,7 +135,8 @@ namespace zscript
 	public:
 		StateTable() = default;
 
-		const string& firstState() const { return state_first_; }
+		const string&                  firstState() const { return state_first_; }
+		const std::map<string, State>& states() const { return states_; }
 
 		bool   parse(ParsedStatement& states);
 		string editorSprite();
@@ -158,6 +159,7 @@ namespace zscript
 		~Class() override = default;
 
 		const vector<Function>& functions() const { return functions_; }
+		const StateTable&       states() const { return states_; }
 
 		bool parse(ParsedStatement& class_statement, const vector<Class>& parsed_classes);
 		bool extend(ParsedStatement& block);

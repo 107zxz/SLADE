@@ -29,16 +29,24 @@ public:
 	CTexture* texture() const { return texture_; }
 	View      viewType() const { return view_type_; }
 	void      setScale(double scale) { scale_ = scale; }
-	void      setViewType(View type) { view_type_ = type; }
-	void      drawOutside(bool draw = true) { draw_outside_ = draw; }
-	Vec2i     mousePrevPos() const { return mouse_prev_; }
-	bool      isDragging() const { return dragging_; }
-	bool      showGrid() const { return show_grid_; }
-	void      showGrid(bool show = true) { show_grid_ = show; }
-	void      setBlendRGBA(bool rgba) { blend_rgba_ = rgba; }
-	bool      blendRGBA() const { return blend_rgba_; }
-	bool      applyTexScale() const { return tex_scale_; }
-	void      applyTexScale(bool apply) { tex_scale_ = apply; }
+	void      setViewType(View type)
+	{
+		view_type_ = type;
+		centerOnTextureBounds();
+	}
+	void  drawOutside(bool draw = true) { draw_outside_ = draw; }
+	Vec2i mousePrevPos() const { return mouse_prev_; }
+	bool  isDragging() const { return dragging_; }
+	bool  showGrid() const { return show_grid_; }
+	void  showGrid(bool show = true) { show_grid_ = show; }
+	void  setBlendRGBA(bool rgba) { blend_rgba_ = rgba; }
+	bool  blendRGBA() const { return blend_rgba_; }
+	bool  applyTexScale() const { return tex_scale_; }
+	void  applyTexScale(bool apply)
+	{
+		tex_scale_ = apply;
+		centerOnTextureBounds();
+	}
 
 	void selectPatch(int index);
 	void deSelectPatch(int index);
@@ -55,6 +63,7 @@ public:
 	void drawTextureBorder() const;
 	void drawOffsetLines() const;
 	void resetOffsets() { offset_.x = offset_.y = 0; }
+	void centerOnTextureBounds();
 	void redraw(bool update_tex = false);
 
 	Vec2i screenToTexPosition(int x, int y) const;

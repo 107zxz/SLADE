@@ -83,7 +83,7 @@ void MapTextureManager::init()
 	// Refresh when resources are updated or the main palette is changed
 	sc_resources_updated_ = app::resources().signals().resources_updated.connect([this]() { refreshResources(); });
 	sc_palette_changed_   = theMainWindow->paletteChooser()->signals().palette_changed.connect([this]()
-                                                                                             { refreshResources(); });
+																							   { refreshResources(); });
 
 	// Load palette
 	if (auto pal = resourcePalette(); pal != palette_.get())
@@ -380,10 +380,11 @@ const MapTextureManager::Texture& MapTextureManager::sprite(
 	bool   found  = false;
 	bool   mirror = false;
 	SImage image;
-	auto   archive = archive_.lock().get();
-	auto   entry   = app::resources().getPatchEntry(name, "sprites", archive);
+	auto   archive     = archive_.lock().get();
+	int    image_index = 0;
+	auto   entry       = app::resources().getPatchEntry(name, "sprites", archive, &image_index);
 	if (!entry)
-		entry = app::resources().getPatchEntry(name, "", archive);
+		entry = app::resources().getPatchEntry(name, "", archive, &image_index);
 	if (!entry && name.length() == 8)
 	{
 		string newname{ name };
@@ -398,7 +399,7 @@ const MapTextureManager::Texture& MapTextureManager::sprite(
 	if (entry)
 	{
 		found = true;
-		misc::loadImageFromEntry(&image, entry);
+		misc::loadImageFromEntry(&image, entry, image_index);
 	}
 	else // Try composite textures then
 	{
@@ -472,14 +473,15 @@ int MapTextureManager::verticalOffset(string_view name) const
 		return 0;
 
 	// Get sprite matching name
-	auto archive = archive_.lock().get();
-	auto entry   = app::resources().getPatchEntry(name, "sprites", archive);
+	auto archive     = archive_.lock().get();
+	int  image_index = 0;
+	auto entry       = app::resources().getPatchEntry(name, "sprites", archive, &image_index);
 	if (!entry)
-		entry = app::resources().getPatchEntry(name, "", archive);
+		entry = app::resources().getPatchEntry(name, "", archive, &image_index);
 	if (entry)
 	{
 		SImage image;
-		misc::loadImageFromEntry(&image, entry);
+		misc::loadImageFromEntry(&image, entry, image_index);
 		int h = image.height();
 		int o = image.offset().y;
 		if (o > h)

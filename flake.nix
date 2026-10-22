@@ -26,6 +26,7 @@
               makeWrapper
               pkg-config
               zip
+              ninja
             ];
 
             buildInputs = with pkgs; [
@@ -74,7 +75,16 @@
               makeWrapper
               pkg-config
               zip
+              ninja
             ];
+
+            shellHook = ''
+              export CMAKE_BUILD_TYPE=RelWithDebInfo
+              cmake -S . -B build \
+                -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+                -DNO_WEBVIEW=ON \
+                -DwxWidgets_CONFIG_EXECUTABLE=${pkgs.wxGTK33}/bin/wx-config
+            '';
           };
         });
     };

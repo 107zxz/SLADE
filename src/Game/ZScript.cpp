@@ -263,8 +263,9 @@ void parseBlocks(ArchiveEntry* entry, vector<ParsedStatement>& parsed, vector<Ar
 			parsed.pop_back();
 	}
 
-	// Set entry type
-	if (etype_zscript && entry->type() != etype_zscript)
+	// Set entry type, but preserve special ZScript-derived entry types such as
+	// fighter definitions, which have their own editor.
+	if (etype_zscript && entry->type() != etype_zscript && entry->type()->editor() != "fighter")
 		entry->setType(etype_zscript);
 
 	entry_stack.pop_back();

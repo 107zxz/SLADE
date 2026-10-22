@@ -96,15 +96,15 @@ GfxEntryPanel::GfxEntryPanel(wxWindow* parent) : EntryPanel(parent, "gfx", true)
 	// Offsets
 	const wxSize spinsize = { ui::px(ui::Size::SpinCtrlWidth), -1 };
 	spin_xoffset_         = new wxSpinCtrl(
-        this,
-        -1,
-        wxEmptyString,
-        wxDefaultPosition,
-        wxDefaultSize,
-        wxSP_ARROW_KEYS | wxTE_PROCESS_ENTER,
-        SHRT_MIN,
-        SHRT_MAX,
-        0);
+		this,
+		-1,
+		wxEmptyString,
+		wxDefaultPosition,
+		wxDefaultSize,
+		wxSP_ARROW_KEYS | wxTE_PROCESS_ENTER,
+		SHRT_MIN,
+		SHRT_MAX,
+		0);
 	spin_yoffset_ = new wxSpinCtrl(
 		this,
 		-1,
@@ -124,7 +124,7 @@ GfxEntryPanel::GfxEntryPanel(wxWindow* parent) : EntryPanel(parent, "gfx", true)
 	// Gfx (offset) type
 	vector<string> offset_types = { "Auto", "Graphic", "Sprite", "HUD" };
 	choice_offset_type_         = new wxChoice(
-        this, -1, wxDefaultPosition, wxDefaultSize, wxutil::arrayStringStd(offset_types));
+		this, -1, wxDefaultPosition, wxDefaultSize, wxutil::arrayStringStd(offset_types));
 	choice_offset_type_->SetSelection(0);
 	sizer_bottom_->Add(choice_offset_type_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, ui::pad());
 
@@ -138,15 +138,15 @@ GfxEntryPanel::GfxEntryPanel(wxWindow* parent) : EntryPanel(parent, "gfx", true)
 	text_imgnum_   = new wxStaticText(this, -1, wxS("Image: "));
 	text_imgoutof_ = new wxStaticText(this, -1, wxS(" out of XX"));
 	spin_curimg_   = new wxSpinCtrl(
-        this,
-        -1,
-        wxEmptyString,
-        wxDefaultPosition,
-        wxDefaultSize,
-        wxSP_ARROW_KEYS | wxTE_PROCESS_ENTER | wxSP_WRAP,
-        1,
-        1,
-        0);
+		this,
+		-1,
+		wxEmptyString,
+		wxDefaultPosition,
+		wxDefaultSize,
+		wxSP_ARROW_KEYS | wxTE_PROCESS_ENTER | wxSP_WRAP,
+		1,
+		1,
+		0);
 	spin_curimg_->SetMinSize(spinsize);
 	sizer_bottom_->Add(text_imgnum_, 0, wxALIGN_CENTER, 0);
 	sizer_bottom_->Add(spin_curimg_, 0, wxSHRINK | wxALIGN_CENTER, ui::pad());
@@ -369,7 +369,7 @@ void GfxEntryPanel::setupToolbars()
 	// View
 	auto* g_view = new SToolBarGroup(toolbar_, "View");
 	btn_arc_     = g_view->addActionButton(
-        "toggle_arc", "Aspect Ratio Correction", "aspectratio", "Toggle Aspect Ratio Correction");
+		"toggle_arc", "Aspect Ratio Correction", "aspectratio", "Toggle Aspect Ratio Correction");
 	btn_arc_->setChecked(gfx_arc);
 	btn_tile_ = g_view->addActionButton("toggle_tile", "Tile", "tile", "Toggle tiled view");
 	toolbar_->addGroup(g_view, true);
@@ -552,9 +552,8 @@ void GfxEntryPanel::refresh(ArchiveEntry* entry)
 	// Apply offset view type
 	applyViewType(entry);
 
-	// Reset display offsets in graphics mode
-	if (gfx_canvas_->viewType() != GfxCanvas::View::Sprite)
-		gfx_canvas_->resetOffsets();
+	// Start with image bounds centered, retaining the selected offset view mode.
+	gfx_canvas_->centerOnImageBounds();
 
 	// Setup custom menu
 	if (image()->type() == SImage::Type::RGBA)
@@ -705,6 +704,7 @@ void GfxEntryPanel::applyViewType(ArchiveEntry* entry) const
 		default: break;
 		}
 	}
+	gfx_canvas_->centerOnImageBounds();
 
 	// Refresh
 	gfx_canvas_->Refresh();
@@ -792,7 +792,7 @@ bool GfxEntryPanel::handleEntryPanelAction(string_view id)
 		// Prompt for rotation angle
 		vector<string> angles = { "90", "180", "270" };
 		const int      choice = wxGetSingleChoiceIndex(
-            wxS("Select rotation angle"), wxS("Rotate"), wxutil::arrayStringStd(angles), 0);
+			wxS("Select rotation angle"), wxS("Rotate"), wxutil::arrayStringStd(angles), 0);
 
 		// Rotate image
 		switch (choice)

@@ -185,6 +185,7 @@ bool CTextureCanvas::openTexture(CTexture* tex, Archive* parent)
 	// Set texture
 	texture_ = tex;
 	parent_  = parent;
+	centerOnTextureBounds();
 
 	// Init patches
 	clearPatchTextures();
@@ -221,6 +222,40 @@ bool CTextureCanvas::openTexture(CTexture* tex, Archive* parent)
 	Refresh();
 
 	return true;
+}
+
+// -----------------------------------------------------------------------------
+// Centers the composite texture bounds, rather than its sprite/HUD origin
+// -----------------------------------------------------------------------------
+void CTextureCanvas::centerOnTextureBounds()
+{
+	offset_ = {};
+	if (!texture_ || view_type_ == View::Normal)
+		return;
+
+	double scalex = 1;
+	double scaley = 1;
+	if (tex_scale_)
+	{
+		scalex = texture_->scaleX();
+		scaley = texture_->scaleY();
+		if (scalex == 0)
+			scalex = 1;
+		if (scaley == 0)
+			scaley = 1;
+	}
+
+	const auto yscale = scale_ * (tx_arc ? 1.2 : 1);
+	if (view_type_ == View::Sprite)
+	{
+		offset_.x = (texture_->offsetX() - texture_->width() * 0.5) * scale_ / scalex;
+		offset_.y = (texture_->offsetY() - texture_->height() * 0.5) * yscale / scaley;
+	}
+	else if (view_type_ == View::HUD)
+	{
+		offset_.x = (texture_->offsetX() + 160 * scalex - texture_->width() * 0.5) * scale_ / scalex;
+		offset_.y = (texture_->offsetY() + 100 * scaley - texture_->height() * 0.5) * yscale / scaley;
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -830,10 +865,10 @@ void CTextureCanvas::onMouseEvent(wxMouseEvent& e)
 		// Pan if middle button is down
 		if (e.MiddleIsDown())
 		{
-			offset_ = offset_
-					  + Vec2d(
-						  e.GetPosition().x * GetContentScaleFactor() - mouse_prev_.x,
-						  e.GetPosition().y * GetContentScaleFactor() - mouse_prev_.y);
+			offset_   = offset_
+						+ Vec2d(
+							e.GetPosition().x * GetContentScaleFactor() - mouse_prev_.x,
+							e.GetPosition().y * GetContentScaleFactor() - mouse_prev_.y);
 			refresh   = true;
 			dragging_ = true;
 		}
