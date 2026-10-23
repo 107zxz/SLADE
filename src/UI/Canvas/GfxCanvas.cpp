@@ -90,6 +90,12 @@ void GfxCanvas::setScale(double scale)
 	scale_ = scale * ui::scaleFactor();
 }
 
+void GfxCanvas::setActorSpriteScale(double x, double y)
+{
+	actor_sprite_scale_ = { x, y };
+	Refresh();
+}
+
 // -----------------------------------------------------------------------------
 // Draws the image/background/etc
 // -----------------------------------------------------------------------------
@@ -137,8 +143,27 @@ void GfxCanvas::draw()
 	if (view_type_ == View::Sprite || view_type_ == View::HUD)
 		drawOffsetLines();
 
-	// Draw the image
 	drawImage();
+	if (!hit_lines_.empty() && view_type_ == View::Sprite)
+	{
+		glDisable(GL_TEXTURE_2D);
+		glPushMatrix();
+		const double yscale = scale_ * (gfx_arc ? 1.2 : 1);
+		glScaled(scale_ * actor_sprite_scale_.x, yscale * actor_sprite_scale_.y, 1);
+		glLineWidth(2.0f);
+		for (size_t i = 0; i < hit_lines_.size(); ++i)
+		{
+			const auto& hit_line = hit_lines_[i];
+			const double y = -hit_line.y / actor_sprite_scale_.y / 2.0;
+			gl::setColour(hitLineColour(i), gl::Blend::Normal);
+			glBegin(GL_LINES);
+			glVertex2d(hit_line.x / actor_sprite_scale_.x, y);
+			glVertex2d((hit_line.x + hit_line.length) / actor_sprite_scale_.x, y);
+			glEnd();
+		}
+		glLineWidth(1.0f);
+		glPopMatrix();
+	}
 
 	// Swap buffers (ie show what was drawn)
 	SwapBuffers();
@@ -147,6 +172,18 @@ void GfxCanvas::draw()
 // -----------------------------------------------------------------------------
 // Draws the offset center lines
 // -----------------------------------------------------------------------------
+void GfxCanvas::setHitLineOverlays(const vector<HitLine>& hit_lines)
+{
+	hit_lines_ = hit_lines;
+	Refresh();
+}
+
+ColRGBA GfxCanvas::hitLineColour(size_t index)
+{
+	constexpr double golden_ratio_conjugate = 0.618033988749895;
+	return ColHSL(std::fmod(index * golden_ratio_conjugate, 1.0), 0.9, 0.5).asRGB();
+}
+
 void GfxCanvas::drawOffsetLines() const
 {
 	if (view_type_ == View::Sprite)
@@ -188,6 +225,8 @@ void GfxCanvas::drawImage()
 	// Zoom
 	const double yscale = (gfx_arc ? scale_ * 1.2 : scale_);
 	glScaled(scale_, yscale, 1.0);
+	if (view_type_ == View::Sprite)
+		glScaled(actor_sprite_scale_.x, actor_sprite_scale_.y, 1.0);
 
 	// Pan
 	if (view_type_ == View::Centered)
@@ -311,8 +350,10 @@ void GfxCanvas::zoomToFit(bool mag, double padding)
 	const double pad  = static_cast<double>(std::min<int>(size.x, size.y)) * padding;
 
 	// Get image dimensions
-	const double x_dim = image_.width();
-	const double y_dim = image_.height();
+	const double sprite_scale_x = view_type_ == View::Sprite ? std::abs(actor_sprite_scale_.x) : 1;
+	const double sprite_scale_y = view_type_ == View::Sprite ? std::abs(actor_sprite_scale_.y) : 1;
+	const double x_dim          = image_.width() * sprite_scale_x;
+	const double y_dim          = image_.height() * sprite_scale_y;
 
 	// Get max scale for x and y (including padding)
 	const double x_scale = (static_cast<double>(size.x) - pad) / x_dim;
@@ -342,8 +383,8 @@ void GfxCanvas::centerOnImageBounds()
 		break;
 	case View::Centered: offset_ = {}; break;
 	case View::Sprite:
-		offset_.x = (image_.offset().x - image_.width() * 0.5) * scale_;
-		offset_.y = (image_.offset().y - image_.height() * 0.5) * yscale;
+		offset_.x = (image_.offset().x - image_.width() * 0.5) * actor_sprite_scale_.x * scale_;
+		offset_.y = (image_.offset().y - image_.height() * 0.5) * actor_sprite_scale_.y * yscale;
 		break;
 	case View::HUD:
 		offset_.x = (image_.offset().x + image_.width() * 0.5 - 160) * scale_;
@@ -391,8 +432,8 @@ Vec2i GfxCanvas::imageCoords(int x, int y) const
 	}
 	else if (view_type_ == View::Sprite)
 	{
-		left -= image_.offset().x * scale_;
-		top -= image_.offset().y * yscale;
+		left -= image_.offset().x * scale_ * actor_sprite_scale_.x;
+		top -= image_.offset().y * yscale * actor_sprite_scale_.y;
 	}
 	else if (view_type_ == View::HUD)
 	{

@@ -18,6 +18,13 @@ namespace ui
 class GfxCanvas : public OGLCanvas
 {
 public:
+	struct HitLine
+	{
+		double length = 0;
+		double x      = 0;
+		double y      = 0;
+	};
+
 	enum class View
 	{
 		Default,
@@ -67,6 +74,9 @@ public:
 
 	void zoomToFit(bool mag = true, double padding = 0.0f);
 	void centerOnImageBounds();
+	void setActorSpriteScale(double x, double y = 1);
+	void setHitLineOverlays(const vector<HitLine>& hit_lines);
+	static ColRGBA hitLineColour(size_t index);
 	void resetOffsets() { offset_.x = offset_.y = 0; }
 
 	bool  onImage(int x, int y) const;
@@ -76,6 +86,7 @@ private:
 	SImage           image_;
 	View             view_type_ = View::Default;
 	double           scale_     = 1.;
+	Vec2d            actor_sprite_scale_ = { 1, 1 };
 	Vec2d            offset_; // panning offsets (not image offsets)
 	unsigned         tex_image_      = 0;
 	bool             update_texture_ = false;
@@ -95,6 +106,7 @@ private:
 	Vec2i            prev_pos_            = { -1, -1 }; // previous position of cursor
 	unsigned         tex_brush_           = 0;          // preview the effect of the brush
 	ui::ZoomControl* linked_zoom_control_ = nullptr;
+	vector<HitLine>  hit_lines_;
 
 	// Signal connections
 	sigslot::scoped_connection sc_image_changed_;

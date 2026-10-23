@@ -555,6 +555,149 @@ string State::editorSprite()
 //
 // -----------------------------------------------------------------------------
 
+namespace
+{
+void parseHitLines(const ParsedStatement& statement, vector<State::HitLine>& hit_lines)
+{
+	for (unsigned i = 0; i + 1 < statement.tokens.size(); ++i)
+	{
+		const auto& function_name = statement.tokens[i];
+		const bool is_hit_line = strutil::equalCI(function_name, "HitLine")
+			|| (function_name.size() > 8 && strutil::endsWithCI(function_name, "_HitLine"));
+		if (!is_hit_line || statement.tokens[i + 1] != "(")
+			continue;
+
+		unsigned comma = i + 2;
+		int      depth = 1;
+		unsigned call_end = comma;
+		for (; comma < statement.tokens.size() && depth > 0; ++comma)
+		{
+			if (statement.tokens[comma] == "(")
+				++depth;
+			else if (statement.tokens[comma] == ")")
+				--depth;
+			else if (statement.tokens[comma] == "," && depth == 1)
+				break;
+		}
+		if (comma >= statement.tokens.size() || statement.tokens[comma] != ",")
+			continue;
+		call_end = comma + 1;
+		depth    = 1;
+		while (call_end < statement.tokens.size() && depth > 0)
+		{
+			if (statement.tokens[call_end] == "(")
+				++depth;
+			else if (statement.tokens[call_end] == ")")
+				--depth;
+			++call_end;
+		}
+
+		string length_text;
+		for (unsigned t = i + 2; t < comma; ++t)
+			length_text += statement.tokens[t];
+		State::HitLine hit_line;
+		if (!strutil::toDouble(length_text, hit_line.length))
+			continue;
+		hit_line.source = statement.entry;
+		if (i + 2 >= statement.token_ranges.size() || comma == 0 || comma - 1 >= statement.token_ranges.size())
+			continue;
+		hit_line.length_range = { statement.token_ranges[i + 2].start, statement.token_ranges[comma - 1].end };
+
+		unsigned tuple = comma + 1;
+		while (tuple < call_end && statement.tokens[tuple] != "(")
+			++tuple;
+		if (tuple >= statement.tokens.size())
+			continue;
+
+		unsigned tuple_comma = tuple + 1;
+		int tuple_depth = 1;
+		for (; tuple_comma < call_end && tuple_depth > 0; ++tuple_comma)
+		{
+			if (statement.tokens[tuple_comma] == "(")
+				++tuple_depth;
+			else if (statement.tokens[tuple_comma] == ")")
+				--tuple_depth;
+			else if (statement.tokens[tuple_comma] == "," && tuple_depth == 1)
+				break;
+		}
+		if (tuple_comma >= statement.tokens.size())
+			continue;
+
+		string x_text;
+		for (unsigned t = tuple + 1; t < tuple_comma; ++t)
+			x_text += statement.tokens[t];
+		if (tuple + 1 >= statement.token_ranges.size() || tuple_comma == 0
+			|| tuple_comma - 1 >= statement.token_ranges.size())
+			continue;
+		hit_line.x_range = { statement.token_ranges[tuple + 1].start, statement.token_ranges[tuple_comma - 1].end };
+
+		unsigned tuple_end = tuple_comma + 1;
+		int      tuple_end_depth = 1;
+		for (; tuple_end < call_end && tuple_end_depth > 0; ++tuple_end)
+		{
+			if (statement.tokens[tuple_end] == "(")
+				++tuple_end_depth;
+			else if (statement.tokens[tuple_end] == ")")
+				--tuple_end_depth;
+		}
+		if (tuple_end >= call_end)
+			continue;
+
+		string y_text;
+		for (unsigned t = tuple_comma + 1; t + 1 < tuple_end; ++t)
+			y_text += statement.tokens[t];
+		if (tuple_comma + 1 >= statement.token_ranges.size() || tuple_end < 2
+			|| tuple_end - 2 >= statement.token_ranges.size())
+			continue;
+		hit_line.y_range = { statement.token_ranges[tuple_comma + 1].start, statement.token_ranges[tuple_end - 2].end };
+		if (strutil::toDouble(x_text, hit_line.x) && strutil::toDouble(y_text, hit_line.y))
+		{
+			hit_line.original_length = hit_line.length;
+			hit_line.original_x      = hit_line.x;
+			hit_line.original_y      = hit_line.y;
+
+			// Retain any parameters after the required length and (x, y) arguments.
+			unsigned argument_start = i + 2;
+			unsigned argument_index = 0;
+			int      argument_depth = 0;
+			for (unsigned t = argument_start; t < call_end; ++t)
+			{
+				const bool at_end = t == call_end - 1 && statement.tokens[t] == ")" && argument_depth == 0;
+				if ((statement.tokens[t] == "," && argument_depth == 0) || at_end)
+				{
+					if (argument_index >= 2 && t > argument_start && argument_start < statement.token_ranges.size()
+						&& t - 1 < statement.token_ranges.size())
+					{
+						State::HitLine::Parameter parameter;
+						parameter.range = { statement.token_ranges[argument_start].start, statement.token_ranges[t - 1].end };
+						if (statement.entry && parameter.range.end <= statement.entry->size())
+					{
+						const auto* source = reinterpret_cast<const char*>(statement.entry->rawData());
+						parameter.value.assign(source + parameter.range.start, parameter.range.end - parameter.range.start);
+					}
+					else
+						for (unsigned token = argument_start; token < t; ++token)
+							parameter.value += statement.tokens[token];
+					parameter.original_value = parameter.value;
+						hit_line.additional_parameters.push_back(std::move(parameter));
+					}
+					++argument_index;
+					argument_start = t + 1;
+				}
+				else if (statement.tokens[t] == "(" || statement.tokens[t] == "[" || statement.tokens[t] == "{")
+					++argument_depth;
+				else if (statement.tokens[t] == ")" || statement.tokens[t] == "]" || statement.tokens[t] == "}")
+					--argument_depth;
+			}
+			hit_lines.push_back(hit_line);
+		}
+	}
+
+	for (const auto& child : statement.block)
+		parseHitLines(child, hit_lines);
+}
+} // namespace
+
 
 // -----------------------------------------------------------------------------
 // Parses a states definition statement/block [states]
@@ -628,7 +771,13 @@ bool StateTable::parse(ParsedStatement& states)
 				strutil::toInt(statement.tokens[index + 2], duration);
 
 			for (auto& state : current_states)
-				states_[state].frames.push_back({ statement.tokens[index], statement.tokens[index + 1], duration });
+			{
+				State::Frame frame{ statement.tokens[index], statement.tokens[index + 1], duration };
+				if (!statement.token_ranges.empty())
+					frame.hit_line_insert_pos = statement.token_ranges.back().end;
+				parseHitLines(statement, frame.hit_lines);
+				states_[state].frames.push_back(std::move(frame));
+			}
 		}
 	}
 
@@ -1145,6 +1294,7 @@ bool ParsedStatement::parse(Tokenizer& tz)
 			{
 				in_initializer = false;
 				tokens.emplace_back("}");
+				token_ranges.push_back({ tz.current().pos_start, tz.current().pos_end });
 				tz.adv();
 				continue;
 			}
@@ -1167,13 +1317,16 @@ bool ParsedStatement::parse(Tokenizer& tz)
 		if (tz.current() == '=' && tz.peek() == '{')
 		{
 			tokens.emplace_back("=");
+			token_ranges.push_back({ tz.current().pos_start, tz.current().pos_end });
 			tokens.emplace_back("{");
+			token_ranges.push_back({ tz.peek().pos_start, tz.peek().pos_end });
 			tz.adv(2);
 			in_initializer = true;
 			continue;
 		}
 
 		tokens.emplace_back(tz.current().text);
+		token_ranges.push_back({ tz.current().pos_start, tz.current().pos_end });
 		tz.adv();
 	}
 

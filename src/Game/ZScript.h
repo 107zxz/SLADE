@@ -13,10 +13,17 @@ namespace zscript
 {
 	struct ParsedStatement
 	{
+		struct TokenRange
+		{
+		unsigned start = 0;
+		unsigned end   = 0;
+		};
+
 		ArchiveEntry* entry = nullptr;
 		unsigned      line;
 
 		vector<string>          tokens;
+		vector<TokenRange>      token_ranges;
 		vector<ParsedStatement> block;
 
 		bool parse(Tokenizer& tz);
@@ -118,11 +125,35 @@ namespace zscript
 
 	struct State
 	{
+		struct HitLine
+		{
+			double length       = 0;
+			double x            = 0;
+			double y            = 0;
+			double original_length = 0;
+			double original_x      = 0;
+			double original_y      = 0;
+			struct Parameter
+			{
+				string value;
+				string original_value;
+				ParsedStatement::TokenRange range;
+			};
+			vector<Parameter> additional_parameters;
+			ArchiveEntry* source = nullptr;
+			bool          added = false;
+			ParsedStatement::TokenRange length_range;
+			ParsedStatement::TokenRange x_range;
+			ParsedStatement::TokenRange y_range;
+		};
+
 		struct Frame
 		{
 			string sprite_base;
 			string sprite_frame;
 			int    duration;
+			vector<HitLine> hit_lines;
+			unsigned hit_line_insert_pos = 0;
 		};
 
 		string editorSprite();
@@ -160,6 +191,7 @@ namespace zscript
 
 		const vector<Function>& functions() const { return functions_; }
 		const StateTable&       states() const { return states_; }
+		const PropertyList&     defaultProperties() const { return default_properties_; }
 
 		bool parse(ParsedStatement& class_statement, const vector<Class>& parsed_classes);
 		bool extend(ParsedStatement& block);

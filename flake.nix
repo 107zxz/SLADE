@@ -76,6 +76,7 @@
               pkg-config
               zip
               ninja
+              gdb
             ];
 
             shellHook = ''
