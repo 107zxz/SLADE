@@ -145,6 +145,15 @@ namespace zscript
 			ParsedStatement::TokenRange length_range;
 			ParsedStatement::TokenRange x_range;
 			ParsedStatement::TokenRange y_range;
+			ParsedStatement::TokenRange call_range;
+		};
+
+		struct SizeChange
+		{
+			double radius = 0;
+			double height = 0;
+			bool   has_radius = false;
+			bool   has_height = false;
 		};
 
 		struct Frame
@@ -152,7 +161,10 @@ namespace zscript
 			string sprite_base;
 			string sprite_frame;
 			int    duration;
+			ParsedStatement::TokenRange duration_range;
+			ArchiveEntry* duration_source = nullptr;
 			vector<HitLine> hit_lines;
+			vector<SizeChange> size_changes;
 			unsigned hit_line_insert_pos = 0;
 		};
 

@@ -21,8 +21,12 @@ private:
 		string sprite_base;
 		char   sprite_frame    = 0;
 		int    duration        = 0;
+		int    original_duration = 0;
+		zscript::ParsedStatement::TokenRange duration_range;
+		ArchiveEntry* duration_source = nullptr;
 		unsigned hit_line_insert_pos = 0;
 		vector<zscript::State::HitLine> hit_lines;
+		vector<zscript::State::SizeChange> size_changes;
 	};
 
 	struct DisplayState
@@ -35,16 +39,20 @@ private:
 	Archive*             priority_archive_ = nullptr;
 	ArchiveEntry*         source_entry_     = nullptr;
 	string                source_text_;
+	vector<zscript::ParsedStatement::TokenRange> removed_hit_lines_;
 	Vec2d                actor_scale_      = { 0.2, 0.2 };
 	double               actor_height_     = 53;
+	double               actor_radius_     = 16;
 	GfxCanvas*           canvas_           = nullptr;
 	wxChoice*            choice_state_     = nullptr;
 	wxButton*            button_prev_      = nullptr;
 	wxButton*            button_next_      = nullptr;
 	wxButton*            button_play_      = nullptr;
 	wxStaticText*        label_frame_      = nullptr;
+	wxSpinCtrl*          spin_frame_duration_ = nullptr;
 	wxChoice*            choice_hit_line_  = nullptr;
 	wxButton*            button_add_hit_line_ = nullptr;
+	wxButton*            button_remove_hit_line_ = nullptr;
 	wxStaticText*        label_hit_line_   = nullptr;
 	wxSpinCtrlDouble*    spin_hit_line_length_ = nullptr;
 	wxSpinCtrlDouble*    spin_hit_line_x_      = nullptr;
@@ -56,6 +64,7 @@ private:
 	wxTimer              playback_timer_;
 	bool                 playing_ = false;
 	bool                 updating_hit_line_controls_ = false;
+	bool                 updating_frame_duration_ = false;
 
 	void updateFrame();
 	void updateHitLineInfo();
@@ -67,6 +76,8 @@ private:
 	void onAddHitLine(wxCommandEvent& e);
 	void onHitLineValueChanged(wxCommandEvent& e);
 	void onHitLineParameterChanged(wxCommandEvent& e);
+	void onFrameDurationChanged(wxCommandEvent& e);
+	void onRemoveHitLine(wxCommandEvent& e);
 	void onPrevious(wxCommandEvent& e);
 	void onNext(wxCommandEvent& e);
 	void onPlay(wxCommandEvent& e);

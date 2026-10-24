@@ -75,6 +75,8 @@ public:
 	void zoomToFit(bool mag = true, double padding = 0.0f);
 	void centerOnImageBounds();
 	void setActorSpriteScale(double x, double y = 1);
+	void setActorBoundsBox(double width, double height);
+	void setHitLineOrigin(double x, double y);
 	void setHitLineOverlays(const vector<HitLine>& hit_lines);
 	static ColRGBA hitLineColour(size_t index);
 	void resetOffsets() { offset_.x = offset_.y = 0; }
@@ -87,6 +89,8 @@ private:
 	View             view_type_ = View::Default;
 	double           scale_     = 1.;
 	Vec2d            actor_sprite_scale_ = { 1, 1 };
+	Vec2d            actor_bounds_box_ = { 0, 0 };
+	Vec2d            hit_line_origin_  = { 0, 0 }; // actor center relative to the sprite origin, in image pixels
 	Vec2d            offset_; // panning offsets (not image offsets)
 	unsigned         tex_image_      = 0;
 	bool             update_texture_ = false;

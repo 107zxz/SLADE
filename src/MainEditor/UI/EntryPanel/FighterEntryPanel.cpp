@@ -17,6 +17,10 @@ using namespace slade;
 
 FighterEntryPanel::FighterEntryPanel(wxWindow* parent) : EntryPanel(parent, "fighter"), playback_timer_{ this }
 {
+	auto view_as_group = new SToolBarGroup(toolbar_, "View As");
+	view_as_group->addActionButton("arch_view_text", "", true);
+	toolbar_->addGroup(view_as_group);
+
 	canvas_ = new GfxCanvas(this, -1);
 	canvas_->setViewType(GfxCanvas::View::Sprite);
 	canvas_->allowScroll(true);
@@ -27,9 +31,12 @@ FighterEntryPanel::FighterEntryPanel(wxWindow* parent) : EntryPanel(parent, "fig
 	button_prev_          = new wxButton(this, wxID_ANY, wxS("Previous"));
 	button_next_          = new wxButton(this, wxID_ANY, wxS("Next"));
 	button_play_          = new wxButton(this, wxID_ANY, wxS("Play"));
-	label_frame_          = new wxStaticText(this, wxID_ANY, wxEmptyString);
-	choice_hit_line_      = new wxChoice(this, -1);
-	button_add_hit_line_  = new wxButton(this, wxID_ANY, wxS("Add"));
+	label_frame_             = new wxStaticText(this, wxID_ANY, wxEmptyString);
+	spin_frame_duration_     = new wxSpinCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(80, -1),
+		wxSP_ARROW_KEYS | wxTE_PROCESS_ENTER, -100000, 100000, 0);
+	choice_hit_line_         = new wxChoice(this, -1);
+	button_add_hit_line_     = new wxButton(this, wxID_ANY, wxS("Add"));
+	button_remove_hit_line_  = new wxButton(this, wxID_ANY, wxS("Remove"));
 	spin_hit_line_length_ = new wxSpinCtrlDouble(
 		this,
 		-1,
@@ -80,9 +87,12 @@ FighterEntryPanel::FighterEntryPanel(wxWindow* parent) : EntryPanel(parent, "fig
 	controls->Add(button_next_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, ui::pad());
 	controls->Add(button_play_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, ui::pad());
 	controls->Add(label_frame_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, ui::pad());
+	controls->Add(new wxStaticText(this, wxID_ANY, wxS("Duration:")), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, ui::pad());
+	controls->Add(spin_frame_duration_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, ui::pad());
 	controls->Add(new wxStaticText(this, wxID_ANY, wxS("HitLine:")), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, ui::pad());
 	controls->Add(choice_hit_line_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, ui::pad());
 	controls->Add(button_add_hit_line_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, ui::pad());
+	controls->Add(button_remove_hit_line_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, ui::pad());
 	controls->AddStretchSpacer();
 	controls->Add(zoom, 0, wxEXPAND);
 	bottom_layout->Add(controls, 0, wxEXPAND);
@@ -105,8 +115,11 @@ FighterEntryPanel::FighterEntryPanel(wxWindow* parent) : EntryPanel(parent, "fig
 	button_prev_->Bind(wxEVT_BUTTON, &FighterEntryPanel::onPrevious, this);
 	button_next_->Bind(wxEVT_BUTTON, &FighterEntryPanel::onNext, this);
 	button_play_->Bind(wxEVT_BUTTON, &FighterEntryPanel::onPlay, this);
+	spin_frame_duration_->Bind(wxEVT_SPINCTRL, &FighterEntryPanel::onFrameDurationChanged, this);
+	spin_frame_duration_->Bind(wxEVT_TEXT_ENTER, &FighterEntryPanel::onFrameDurationChanged, this);
 	choice_hit_line_->Bind(wxEVT_CHOICE, &FighterEntryPanel::onHitLineChanged, this);
 	button_add_hit_line_->Bind(wxEVT_BUTTON, &FighterEntryPanel::onAddHitLine, this);
+	button_remove_hit_line_->Bind(wxEVT_BUTTON, &FighterEntryPanel::onRemoveHitLine, this);
 	spin_hit_line_length_->Bind(wxEVT_SPINCTRLDOUBLE, &FighterEntryPanel::onHitLineValueChanged, this);
 	spin_hit_line_x_->Bind(wxEVT_SPINCTRLDOUBLE, &FighterEntryPanel::onHitLineValueChanged, this);
 	spin_hit_line_y_->Bind(wxEVT_SPINCTRLDOUBLE, &FighterEntryPanel::onHitLineValueChanged, this);
@@ -126,6 +139,7 @@ bool FighterEntryPanel::loadEntry(ArchiveEntry* entry)
 	if (!entry)
 		return false;
 	states_.clear();
+	removed_hit_lines_.clear();
 	source_entry_ = entry;
 	source_text_.assign(reinterpret_cast<const char*>(entry->rawData()), entry->size());
 	setPlaying(false);
@@ -151,7 +165,11 @@ bool FighterEntryPanel::loadEntry(ArchiveEntry* entry)
 			for (const auto sprite_frame : frame.sprite_frame)
 			{
 				DisplayFrame display_frame{ frame.sprite_base, sprite_frame, frame.duration };
+				display_frame.original_duration = frame.duration;
+				display_frame.duration_range = frame.duration_range;
+				display_frame.duration_source = frame.duration_source;
 				display_frame.hit_line_insert_pos = frame.hit_line_insert_pos;
+				display_frame.size_changes = frame.size_changes;
 				for (const auto& hit_line : frame.hit_lines)
 					display_frame.hit_lines.push_back(hit_line);
 				display_state.frames.push_back(std::move(display_frame));
@@ -173,6 +191,7 @@ bool FighterEntryPanel::loadEntry(ArchiveEntry* entry)
 	}
 	actor_scale_         = { 0.2, 0.2 };
 	actor_height_        = 53;
+	actor_radius_        = 12;
 	const auto& defaults = definitions.classes().front().defaultProperties();
 	if (const auto scale = defaults.getIf<string>("scale"))
 	{
@@ -185,6 +204,8 @@ bool FighterEntryPanel::loadEntry(ArchiveEntry* entry)
 		strutil::toDouble(*scale_y, actor_scale_.y);
 	if (const auto height = defaults.getIf<string>("height"))
 		strutil::toDouble(*height, actor_height_);
+	if (const auto radius = defaults.getIf<string>("radius"))
+		strutil::toDouble(*radius, actor_radius_);
 	if (actor_scale_.x == 0)
 		actor_scale_.x = 0.2;
 	if (actor_scale_.y == 0)
@@ -210,12 +231,28 @@ void FighterEntryPanel::updateFrame()
 		return;
 	current_frame_ %= state.frames.size();
 	const auto& frame = state.frames[current_frame_];
+	double      radius = actor_radius_;
+	double      height = actor_height_;
+	for (size_t i = 0; i <= current_frame_; ++i)
+		for (const auto& size_change : state.frames[i].size_changes)
+		{
+			if (size_change.has_radius)
+				radius = size_change.radius;
+			if (size_change.has_height)
+				height = size_change.height;
+		}
+	updating_frame_duration_ = true;
+	spin_frame_duration_->SetValue(frame.duration);
+	spin_frame_duration_->Enable(
+			frame.duration_source == source_entry_ && frame.duration_range.end > frame.duration_range.start);
+	updating_frame_duration_ = false;
 	current_hit_line_ = 0;
 	choice_hit_line_->Clear();
 	for (size_t i = 0; i < frame.hit_lines.size(); ++i)
 		choice_hit_line_->Append(WX_FMT("{}", static_cast<unsigned long>(i + 1)));
 	choice_hit_line_->Enable(!frame.hit_lines.empty());
 	button_add_hit_line_->Enable(source_entry_ != nullptr);
+	button_remove_hit_line_->Enable(false);
 	if (!frame.hit_lines.empty())
 		choice_hit_line_->SetSelection(0);
 	spin_hit_line_length_->Enable(!frame.hit_lines.empty());
@@ -236,17 +273,18 @@ void FighterEntryPanel::updateFrame()
 	{
 		canvas_->setViewType(GfxCanvas::View::Sprite);
 		canvas_->setActorSpriteScale(actor_scale_.x, actor_scale_.y);
+		canvas_->setActorBoundsBox(radius, height);
+		canvas_->setHitLineOrigin(0, -height / (2.0 * actor_scale_.y));
 		updateHitLineOverlays();
 		canvas_->zoomToFit(true, 0.1);
 		if (!playing_)
 			canvas_->centerOnImageBounds();
 		label_frame_->SetLabel(WX_FMT(
-			"{} {} ({}/{}, duration {})",
+			"{} {} ({}/{})",
 			frame.sprite_base,
 			frame.sprite_frame,
 			static_cast<unsigned long>(current_frame_ + 1),
-			static_cast<unsigned long>(state.frames.size()),
-			frame.duration));
+			static_cast<unsigned long>(state.frames.size())));
 	}
 	else
 		label_frame_->SetLabel(WX_FMT(
@@ -293,6 +331,8 @@ void FighterEntryPanel::updateHitLineInfo()
 		spin_hit_line_length_->SetValue(selected_hit_line->length);
 		spin_hit_line_x_->SetValue(selected_hit_line->x);
 		spin_hit_line_y_->SetValue(selected_hit_line->y);
+		button_remove_hit_line_->Enable(
+			selected_hit_line->added || (can_edit && selected_hit_line->call_range.end > selected_hit_line->call_range.start));
 		spin_hit_line_length_->Enable(can_edit);
 		spin_hit_line_x_->Enable(can_edit);
 		spin_hit_line_y_->Enable(can_edit);
@@ -301,6 +341,7 @@ void FighterEntryPanel::updateHitLineInfo()
 	else
 	{
 		label_hit_line_->SetLabel(wxS("No HitLines"));
+		button_remove_hit_line_->Enable(false);
 		spin_hit_line_length_->SetValue(0);
 		spin_hit_line_x_->SetValue(0);
 		spin_hit_line_y_->SetValue(0);
@@ -354,7 +395,7 @@ void FighterEntryPanel::updateHitLineOverlays()
 
 	vector<GfxCanvas::HitLine> hit_lines;
 	for (const auto& hit_line : state.frames[current_frame_].hit_lines)
-		hit_lines.push_back({ hit_line.length, hit_line.x, hit_line.y + actor_height_ });
+		hit_lines.push_back({ hit_line.length, hit_line.x, hit_line.y });
 	canvas_->setHitLineOverlays(hit_lines);
 }
 
@@ -423,6 +464,87 @@ void FighterEntryPanel::onHitLineParameterChanged(wxCommandEvent& e)
 						   == hit_line.additional_parameters[parameter_index].range.start)
 					sibling_line.additional_parameters[parameter_index].value = value;
 	setModified();
+}
+
+void FighterEntryPanel::onFrameDurationChanged(wxCommandEvent& e)
+{
+	if (updating_frame_duration_ || states_.empty() || choice_state_->GetSelection() < 0)
+		return;
+
+	auto& state = states_[choice_state_->GetSelection()];
+	if (current_frame_ >= state.frames.size())
+		return;
+	auto& frame = state.frames[current_frame_];
+	if (frame.duration_source != source_entry_ || frame.duration_range.end <= frame.duration_range.start)
+		return;
+
+	const auto duration = spin_frame_duration_->GetValue();
+	if (duration == frame.duration)
+		return;
+
+	for (auto& sibling_state : states_)
+		for (auto& sibling_frame : sibling_state.frames)
+			if (sibling_frame.duration_source == frame.duration_source
+				&& sibling_frame.duration_range.start == frame.duration_range.start
+				&& sibling_frame.duration_range.end == frame.duration_range.end)
+				sibling_frame.duration = duration;
+	setModified();
+	if (playing_)
+		setPlaying(true);
+}
+
+void FighterEntryPanel::onRemoveHitLine(wxCommandEvent& e)
+{
+	if (states_.empty() || choice_state_->GetSelection() < 0)
+		return;
+
+	auto& state = states_[choice_state_->GetSelection()];
+	if (current_frame_ >= state.frames.size())
+		return;
+	auto& hit_lines = state.frames[current_frame_].hit_lines;
+	const auto selection = choice_hit_line_->GetSelection();
+	if (selection < 0 || static_cast<size_t>(selection) >= hit_lines.size())
+		return;
+
+	const auto removed_index = static_cast<size_t>(selection);
+	const auto removed_line  = hit_lines[removed_index];
+	if (removed_line.added)
+		hit_lines.erase(hit_lines.begin() + selection);
+	else
+	{
+		if (removed_line.source != source_entry_ || removed_line.call_range.end <= removed_line.call_range.start)
+			return;
+		if (std::none_of(
+				removed_hit_lines_.begin(),
+				removed_hit_lines_.end(),
+				[&removed_line](const auto& range)
+				{ return range.start == removed_line.call_range.start && range.end == removed_line.call_range.end; }))
+			removed_hit_lines_.push_back(removed_line.call_range);
+
+		for (auto& sibling_state : states_)
+			for (auto& sibling_frame : sibling_state.frames)
+			{
+				auto& sibling_lines = sibling_frame.hit_lines;
+				sibling_lines.erase(
+					std::remove_if(
+						sibling_lines.begin(),
+						sibling_lines.end(),
+						[&removed_line](const auto& line)
+						{
+							return !line.added && line.source == removed_line.source
+								&& line.call_range.start == removed_line.call_range.start
+								&& line.call_range.end == removed_line.call_range.end;
+						}),
+					sibling_lines.end());
+			}
+	}
+
+	setModified();
+	updateFrame();
+	const auto& remaining = states_[choice_state_->GetSelection()].frames[current_frame_].hit_lines;
+	if (!remaining.empty())
+		choice_hit_line_->SetSelection(std::min(removed_index, remaining.size() - 1));
+	updateHitLineInfo();
 }
 
 void FighterEntryPanel::onStateChanged(wxCommandEvent& e)
@@ -494,12 +616,17 @@ bool FighterEntryPanel::writeEntry(ArchiveEntry& entry)
 	vector<std::pair<unsigned, string>> added_hit_lines;
 	for (const auto& state : states_)
 		for (const auto& frame : state.frames)
+		{
+			if (frame.duration != frame.original_duration && frame.duration_source == source_entry_
+				&& frame.duration_range.end > frame.duration_range.start)
+				replacements.push_back(
+					{ frame.duration_range.start, frame.duration_range.end, fmt::format("{}", frame.duration) });
 			for (const auto& hit_line : frame.hit_lines)
 			{
 				if (hit_line.added)
 				{
 					const auto call = fmt::format(
-						" A_HitLine({:.6g}, ({:.6g}, {:.6g}))", hit_line.length, hit_line.x, hit_line.y);
+						" HitLine({:.6g}, ({:.6g}, {:.6g}))", hit_line.length, hit_line.x, hit_line.y);
 					auto insertion = std::find_if(
 						added_hit_lines.begin(),
 						added_hit_lines.end(),
@@ -527,6 +654,9 @@ bool FighterEntryPanel::writeEntry(ArchiveEntry& entry)
 					if (parameter.value != parameter.original_value)
 						replacements.push_back({ parameter.range.start, parameter.range.end, parameter.value });
 			}
+		}
+	for (const auto& range : removed_hit_lines_)
+		replacements.push_back({ range.start, range.end, {} });
 	for (const auto& [position, calls] : added_hit_lines)
 		replacements.push_back({ position, position, calls });
 	vector<Replacement> unique_replacements;

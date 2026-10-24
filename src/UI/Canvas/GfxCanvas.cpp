@@ -96,6 +96,18 @@ void GfxCanvas::setActorSpriteScale(double x, double y)
 	Refresh();
 }
 
+void GfxCanvas::setActorBoundsBox(double width, double height)
+{
+	actor_bounds_box_ = { width, height };
+	Refresh();
+}
+
+void GfxCanvas::setHitLineOrigin(double x, double y)
+{
+	hit_line_origin_ = { x, y };
+	Refresh();
+}
+
 // -----------------------------------------------------------------------------
 // Draws the image/background/etc
 // -----------------------------------------------------------------------------
@@ -144,21 +156,37 @@ void GfxCanvas::draw()
 		drawOffsetLines();
 
 	drawImage();
-	if (!hit_lines_.empty() && view_type_ == View::Sprite)
+	if (view_type_ == View::Sprite && (!hit_lines_.empty() || (actor_bounds_box_.x > 0 && actor_bounds_box_.y > 0)))
 	{
 		glDisable(GL_TEXTURE_2D);
 		glPushMatrix();
 		const double yscale = scale_ * (gfx_arc ? 1.2 : 1);
 		glScaled(scale_ * actor_sprite_scale_.x, yscale * actor_sprite_scale_.y, 1);
 		glLineWidth(2.0f);
+		if (actor_bounds_box_.x > 0 && actor_bounds_box_.y > 0)
+		{
+			const double left  = -actor_bounds_box_.x / actor_sprite_scale_.x / 2.0;
+			const double right = actor_bounds_box_.x / actor_sprite_scale_.x / 2.0;
+			const double top   = -actor_bounds_box_.y / actor_sprite_scale_.y;
+			gl::setColour(ColRGBA(0, 255, 0), gl::Blend::Normal);
+			glBegin(GL_LINE_LOOP);
+			glVertex2d(left, 0);
+			glVertex2d(left, top);
+			glVertex2d(right, top);
+			glVertex2d(right, 0);
+			glEnd();
+		}
 		for (size_t i = 0; i < hit_lines_.size(); ++i)
 		{
-			const auto& hit_line = hit_lines_[i];
-			const double y = -hit_line.y / actor_sprite_scale_.y / 2.0;
+			const auto&  hit_line = hit_lines_[i];
+			const double x        = hit_line_origin_.x + hit_line.x / actor_sprite_scale_.x;
+			const double y        = hit_line_origin_.y - hit_line.y / actor_sprite_scale_.y;
 			gl::setColour(hitLineColour(i), gl::Blend::Normal);
-			glBegin(GL_LINES);
-			glVertex2d(hit_line.x / actor_sprite_scale_.x, y);
-			glVertex2d((hit_line.x + hit_line.length) / actor_sprite_scale_.x, y);
+			glBegin(GL_LINE_LOOP);
+			glVertex2d(x, y - 3);
+			glVertex2d(x + hit_line.length / actor_sprite_scale_.x, y - 3);
+			glVertex2d(x + hit_line.length / actor_sprite_scale_.x, y + 3);
+			glVertex2d(x, y + 3);
 			glEnd();
 		}
 		glLineWidth(1.0f);
@@ -181,7 +209,7 @@ void GfxCanvas::setHitLineOverlays(const vector<HitLine>& hit_lines)
 ColRGBA GfxCanvas::hitLineColour(size_t index)
 {
 	constexpr double golden_ratio_conjugate = 0.618033988749895;
-	return ColHSL(std::fmod(index * golden_ratio_conjugate, 1.0), 0.9, 0.5).asRGB();
+	return ColHSL(std::fmod(index * golden_ratio_conjugate, 1.0), 0.6, 0.7).asRGB();
 }
 
 void GfxCanvas::drawOffsetLines() const

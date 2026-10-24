@@ -557,6 +557,60 @@ string State::editorSprite()
 
 namespace
 {
+void parseSizeChanges(const ParsedStatement& statement, vector<State::SizeChange>& size_changes)
+{
+	for (unsigned i = 0; i + 1 < statement.tokens.size(); ++i)
+	{
+		if (!strutil::equalCI(statement.tokens[i], "SetSize") || statement.tokens[i + 1] != "(")
+			continue;
+
+		vector<string> arguments;
+		string        argument;
+		int           depth = 1;
+		unsigned      token = i + 2;
+		for (; token < statement.tokens.size() && depth > 0; ++token)
+		{
+			const auto& value = statement.tokens[token];
+			if (value == "(" || value == "[" || value == "{")
+			{
+				++depth;
+				argument += value;
+			}
+			else if (value == ")" || value == "]" || value == "}")
+			{
+				if (value == ")" && depth == 1)
+				{
+					arguments.push_back(argument);
+					break;
+				}
+				--depth;
+				argument += value;
+			}
+			else if (value == "," && depth == 1)
+			{
+				arguments.push_back(argument);
+				argument.clear();
+			}
+			else
+				argument += value;
+		}
+
+		if (arguments.empty())
+			continue;
+
+		State::SizeChange change;
+		if (!arguments[0].empty())
+			change.has_radius = strutil::toDouble(arguments[0], change.radius);
+		if (arguments.size() > 1 && !arguments[1].empty())
+			change.has_height = strutil::toDouble(arguments[1], change.height);
+		if (change.has_radius || change.has_height)
+			size_changes.push_back(change);
+	}
+
+	for (const auto& child : statement.block)
+		parseSizeChanges(child, size_changes);
+}
+
 void parseHitLines(const ParsedStatement& statement, vector<State::HitLine>& hit_lines)
 {
 	for (unsigned i = 0; i + 1 < statement.tokens.size(); ++i)
@@ -689,6 +743,8 @@ void parseHitLines(const ParsedStatement& statement, vector<State::HitLine>& hit
 				else if (statement.tokens[t] == ")" || statement.tokens[t] == "]" || statement.tokens[t] == "}")
 					--argument_depth;
 			}
+			if (i < statement.token_ranges.size() && call_end > i && call_end - 1 < statement.token_ranges.size())
+				hit_line.call_range = { statement.token_ranges[i].start, statement.token_ranges[call_end - 1].end };
 			hit_lines.push_back(hit_line);
 		}
 	}
@@ -773,9 +829,19 @@ bool StateTable::parse(ParsedStatement& states)
 			for (auto& state : current_states)
 			{
 				State::Frame frame{ statement.tokens[index], statement.tokens[index + 1], duration };
+				frame.duration_source = statement.entry;
+				if (index + 2 < statement.token_ranges.size())
+				{
+					const auto duration_end = statement.tokens[index + 2] == '-' && index + 3 < statement.token_ranges.size()
+						? index + 3
+						: index + 2;
+					frame.duration_range = {
+						statement.token_ranges[index + 2].start, statement.token_ranges[duration_end].end };
+				}
 				if (!statement.token_ranges.empty())
 					frame.hit_line_insert_pos = statement.token_ranges.back().end;
 				parseHitLines(statement, frame.hit_lines);
+				parseSizeChanges(statement, frame.size_changes);
 				states_[state].frames.push_back(std::move(frame));
 			}
 		}
