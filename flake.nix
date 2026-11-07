@@ -19,7 +19,17 @@
             pname = "slade";
             version = "3.2.0";
 
-            src = ./.;
+            src = pkgs.lib.cleanSourceWith {
+              src = ./.;
+              filter = path: type:
+                !(builtins.elem (builtins.baseNameOf (toString path)) [
+                  ".git"
+                  ".direnv"
+                  "build"
+                  "out"
+                  "result"
+                ]);
+            };
 
             nativeBuildInputs = with pkgs; [
               cmake

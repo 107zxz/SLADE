@@ -38,6 +38,7 @@
 #include "General/Console.h"
 #include "Graphics/CTexture/CTexture.h"
 #include "Graphics/CTexture/TextureXList.h"
+#include "Graphics/SImage/SIFormat.h"
 #include "Utility/StringUtils.h"
 
 using namespace slade;
@@ -689,10 +690,10 @@ ArchiveEntry* ResourceManager::getPatchEntry(
 	if (entry)
 		return entry;
 
-	// Aseprite sprite resources represent their first sprite frame in the file
-	// name (eg. ABBYA0.ase), while further frames are exposed as consecutive
+	// Aseprite and Resprite resources represent their first sprite frame in the
+	// file name (eg. ABBYA0.ase), while further frames are exposed as consecutive
 	// sprite names (ABBYB0, ABBYC0, ...). Resolve those names to the first-frame
-	// resource and return the corresponding Aseprite animation frame index.
+	// resource and return the corresponding animation frame index.
 	if (image_index && patch_upper.size() >= 6 && std::isalpha(static_cast<unsigned char>(patch_upper[4]))
 		&& std::isdigit(static_cast<unsigned char>(patch_upper[5])))
 	{
@@ -708,6 +709,17 @@ ArchiveEntry* ResourceManager::getPatchEntry(
 			const auto* data        = ase_entry->rawData();
 			const auto  frame_count = static_cast<int>(data[6] | (data[7] << 8));
 			if (ase_frame >= frame_count)
+				return nullptr;
+
+			if (image_index)
+				*image_index = ase_frame;
+			return ase_entry;
+		}
+		if (ase_entry && ase_entry->type()->formatId() == "img_resprite"
+			&& strutil::equalCI(ase_entry->upperNameNoExt(), ase_name))
+		{
+			const auto info = SIFormat::getFormat("resprite")->info(ase_entry->data(), 0);
+			if (ase_frame >= info.numimages)
 				return nullptr;
 
 			if (image_index)

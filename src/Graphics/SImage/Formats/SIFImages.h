@@ -2,7 +2,14 @@
 #include "UI/WxUtils.h"
 #include "Utility/Compression.h"
 #include <array>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
+#include <limits>
+#include <map>
 #include <png.h>
+#include <wx/mstream.h>
+#include <wx/zipstrm.h>
 
 class PNGChunk
 {
@@ -539,6 +546,470 @@ private:
 		}
 
 		return rgba;
+	}
+};
+
+namespace resprite
+{
+struct JsonValue
+{
+	enum class Type { Null, Boolean, Number, String, Object, Array } type = Type::Null;
+	bool boolean = false;
+	double number = 0;
+	std::string string;
+	std::map<std::string, JsonValue> object;
+	std::vector<JsonValue> array;
+};
+
+class JsonParser
+{
+public:
+	explicit JsonParser(const std::string& text) : text_{ text } {}
+
+	bool parse(JsonValue& value)
+	{
+		return parseValue(value, 0) && (skipWhitespace(), position_ == text_.size());
+	}
+
+private:
+	const std::string& text_;
+	size_t position_ = 0;
+
+	void skipWhitespace()
+	{
+		while (position_ < text_.size() && std::isspace(static_cast<unsigned char>(text_[position_])))
+			++position_;
+	}
+
+	bool parseString(std::string& value)
+	{
+		if (position_ >= text_.size() || text_[position_++] != '"')
+			return false;
+		while (position_ < text_.size())
+		{
+			const char c = text_[position_++];
+			if (c == '"')
+				return true;
+			if (static_cast<unsigned char>(c) < 0x20)
+				return false;
+			if (c != '\\')
+			{
+				value += c;
+				continue;
+			}
+			if (position_ == text_.size())
+				return false;
+			switch (text_[position_++])
+			{
+			case '"': value += '"'; break;
+			case '\\': value += '\\'; break;
+			case '/': value += '/'; break;
+			case 'b': value += '\b'; break;
+			case 'f': value += '\f'; break;
+			case 'n': value += '\n'; break;
+			case 'r': value += '\r'; break;
+			case 't': value += '\t'; break;
+			case 'u':
+			{
+				if (position_ + 4 > text_.size()) return false;
+				unsigned codepoint = 0;
+				for (int i = 0; i < 4; ++i)
+				{
+					const char digit = text_[position_++];
+					codepoint <<= 4;
+					if (digit >= '0' && digit <= '9') codepoint |= digit - '0';
+					else if (digit >= 'a' && digit <= 'f') codepoint |= digit - 'a' + 10;
+					else if (digit >= 'A' && digit <= 'F') codepoint |= digit - 'A' + 10;
+					else return false;
+				}
+				if (codepoint < 0x80) value += static_cast<char>(codepoint);
+				else if (codepoint < 0x800)
+				{
+					value += static_cast<char>(0xC0 | (codepoint >> 6));
+					value += static_cast<char>(0x80 | (codepoint & 0x3F));
+				}
+				else
+				{
+					value += static_cast<char>(0xE0 | (codepoint >> 12));
+					value += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+					value += static_cast<char>(0x80 | (codepoint & 0x3F));
+				}
+				break;
+			}
+			default: return false;
+			}
+		}
+		return false;
+	}
+
+	bool parseValue(JsonValue& value, unsigned depth)
+	{
+		if (depth > 64) return false;
+		skipWhitespace();
+		if (position_ >= text_.size()) return false;
+		const char c = text_[position_];
+		if (c == '{')
+		{
+			value.type = JsonValue::Type::Object;
+			++position_;
+			skipWhitespace();
+			if (position_ < text_.size() && text_[position_] == '}') { ++position_; return true; }
+			while (position_ < text_.size())
+			{
+				std::string key;
+				skipWhitespace();
+				if (!parseString(key)) return false;
+				skipWhitespace();
+				if (position_ >= text_.size() || text_[position_++] != ':') return false;
+				JsonValue child;
+				if (!parseValue(child, depth + 1)) return false;
+				value.object[std::move(key)] = std::move(child);
+				skipWhitespace();
+				if (position_ >= text_.size()) return false;
+				if (text_[position_++] == '}') return true;
+				if (text_[position_ - 1] != ',') return false;
+			}
+			return false;
+		}
+		if (c == '[')
+		{
+			value.type = JsonValue::Type::Array;
+			++position_;
+			skipWhitespace();
+			if (position_ < text_.size() && text_[position_] == ']') { ++position_; return true; }
+			while (position_ < text_.size())
+			{
+				JsonValue child;
+				if (!parseValue(child, depth + 1)) return false;
+				value.array.push_back(std::move(child));
+				skipWhitespace();
+				if (position_ >= text_.size()) return false;
+				if (text_[position_++] == ']') return true;
+				if (text_[position_ - 1] != ',') return false;
+			}
+			return false;
+		}
+		if (c == '"')
+		{
+			value.type = JsonValue::Type::String;
+			return parseString(value.string);
+		}
+		if (text_.compare(position_, 4, "true") == 0)
+		{
+			position_ += 4; value.type = JsonValue::Type::Boolean; value.boolean = true; return true;
+		}
+		if (text_.compare(position_, 5, "false") == 0)
+		{
+			position_ += 5; value.type = JsonValue::Type::Boolean; value.boolean = false; return true;
+		}
+		if (text_.compare(position_, 4, "null") == 0) { position_ += 4; return true; }
+		const char* start = text_.c_str() + position_;
+		char* end = nullptr;
+		value.number = std::strtod(start, &end);
+		if (end == start || !std::isfinite(value.number)) return false;
+		position_ += static_cast<size_t>(end - start);
+		value.type = JsonValue::Type::Number;
+		return true;
+	}
+};
+
+const JsonValue* member(const JsonValue& value, const char* key)
+{
+	if (value.type != JsonValue::Type::Object) return nullptr;
+	auto it = value.object.find(key);
+	return it == value.object.end() ? nullptr : &it->second;
+}
+
+bool integer(const JsonValue& value, int& result)
+{
+	if (value.type != JsonValue::Type::Number || value.number < std::numeric_limits<int>::min()
+		|| value.number > std::numeric_limits<int>::max() || std::floor(value.number) != value.number)
+		return false;
+	result = static_cast<int>(value.number);
+	return true;
+}
+
+struct Document
+{
+	int width = 0;
+	int height = 0;
+	int frames = 0;
+	std::string prefix;
+	JsonValue json;
+};
+
+bool readArchive(MemChunk& data, Document& parsed, std::map<std::string, std::vector<uint8_t>>* cells = nullptr)
+{
+	if (data.size() < 4 || data.readL32(0) != 0x04034B50) return false;
+	wxMemoryInputStream input(data.data(), data.size());
+	wxZipInputStream zip(input);
+	if (!zip.IsOk()) return false;
+	std::string documentText;
+	std::string documentPath;
+	size_t cellBytes = 0;
+	while (auto* entry = zip.GetNextEntry())
+	{
+		std::string path = entry->GetName(wxPATH_UNIX).utf8_string();
+		std::replace(path.begin(), path.end(), '\\', '/');
+		const auto slash = path.find_last_of('/');
+		const bool isDocument = (slash == std::string::npos ? path : path.substr(slash + 1)) == "document.json";
+		const bool isCell = cells && path.find("CellData/") != std::string::npos && path.size() > 4
+			&& path.compare(path.size() - 4, 4, ".png") == 0;
+		const auto size = entry->GetSize();
+		if (isDocument && documentText.empty() && size > 0 && size <= 16 * 1024 * 1024)
+		{
+			std::vector<char> bytes(static_cast<size_t>(size));
+			zip.Read(bytes.data(), bytes.size());
+			if (zip.LastRead() == bytes.size())
+			{
+				documentText.assign(bytes.data(), bytes.size());
+				documentPath = path;
+			}
+		}
+		else if (isCell && size > 0 && size <= 64 * 1024 * 1024 && cellBytes + size <= 256 * 1024 * 1024)
+		{
+			std::vector<uint8_t> bytes(static_cast<size_t>(size));
+			zip.Read(bytes.data(), bytes.size());
+			if (zip.LastRead() == bytes.size())
+			{
+				cellBytes += bytes.size();
+				(*cells)[path] = std::move(bytes);
+			}
+		}
+		zip.CloseEntry();
+		delete entry;
+		if (!documentText.empty() && !cells) break;
+	}
+	if (documentText.empty()) return false;
+	JsonParser parser{ documentText };
+	if (!parser.parse(parsed.json) || parsed.json.type != JsonValue::Type::Object) return false;
+	const auto* canvas = member(parsed.json, "canvasSize");
+	const auto* width = canvas ? member(*canvas, "width") : nullptr;
+	const auto* height = canvas ? member(*canvas, "height") : nullptr;
+	const auto* frameCount = member(parsed.json, "frameCount");
+	const auto* layers = member(parsed.json, "layerDatas");
+	if (!width || !height || !frameCount || !layers || layers->type != JsonValue::Type::Array || layers->array.size() > 1024
+		|| !integer(*width, parsed.width) || !integer(*height, parsed.height) || !integer(*frameCount, parsed.frames))
+		return false;
+	if (parsed.width <= 0 || parsed.height <= 0 || parsed.width > 8192 || parsed.height > 8192
+		|| static_cast<uint64_t>(parsed.width) * parsed.height > 64ull * 1024 * 1024
+		|| parsed.frames <= 0 || parsed.frames > 29
+		|| static_cast<uint64_t>(parsed.width) * parsed.height * 4 * parsed.frames > 256ull * 1024 * 1024)
+		return false;
+	const auto slash = documentPath.find_last_of('/');
+	if (slash != std::string::npos)
+		parsed.prefix = documentPath.substr(0, slash + 1);
+	return true;
+}
+
+uint8_t opacity(const JsonValue& object, const char* key)
+{
+	const auto* value = member(object, key);
+	if (!value || value->type != JsonValue::Type::Number || !std::isfinite(value->number)) return 255;
+	return static_cast<uint8_t>(std::lround(std::clamp(value->number, 0.0, 1.0) * 255.0));
+}
+
+bool uuid(const std::string& value)
+{
+	if (value.size() != 36) return false;
+	for (size_t i = 0; i < value.size(); ++i)
+	{
+		if (i == 8 || i == 13 || i == 18 || i == 23)
+		{
+			if (value[i] != '-') return false;
+		}
+		else if (!std::isxdigit(static_cast<unsigned char>(value[i]))) return false;
+	}
+	return true;
+}
+} // namespace resprite
+
+class SIFResprite : public SIFormat
+{
+public:
+	SIFResprite() : SIFormat("resprite", "Resprite", "resprite", 255) {}
+
+	bool isThisFormat(MemChunk& data) override
+	{
+		resprite::Document document;
+		return resprite::readArchive(data, document);
+	}
+
+	SImage::Info info(MemChunk& data, int index) override
+	{
+		SImage::Info result;
+		result.format = "resprite";
+		resprite::Document document;
+		if (resprite::readArchive(data, document))
+		{
+			result.width = document.width;
+			result.height = document.height;
+			result.numimages = document.frames;
+			result.imgindex = std::clamp(index, 0, document.frames - 1);
+			result.offset_x = document.width / 2;
+			result.offset_y = document.height;
+		}
+		return result;
+	}
+
+protected:
+	bool readImage(SImage& image, MemChunk& data, int index) override
+	{
+		resprite::Document document;
+		std::map<std::string, std::vector<uint8_t>> cellFiles;
+		if (!resprite::readArchive(data, document, &cellFiles))
+		{
+			global::error = "Invalid Resprite project";
+			return false;
+		}
+		if (index < 0 || index >= document.frames) index = 0;
+
+		struct RasterCell { int width = 0; int height = 0; std::vector<uint8_t> rgba; };
+		std::map<std::string, RasterCell> decodedCells;
+		const auto* layers = resprite::member(document.json, "layerDatas");
+		std::vector<uint8_t> canvas(static_cast<size_t>(document.width) * document.height * 4, 0);
+		struct InheritedCell
+		{
+			std::string id;
+			int baseX = 0, baseY = 0, x = 0, y = 0;
+			uint8_t opacity = 255;
+			bool hasSource = false;
+		};
+		std::vector<InheritedCell> inherited(layers->array.size());
+
+		// Walk all preceding frames to resolve inherited cels, but composite only the requested frame.
+		for (int currentFrame = 0; currentFrame <= index; ++currentFrame)
+		{
+		for (size_t layerIndex = layers->array.size(); layerIndex > 0; --layerIndex)
+		{
+			const size_t indexInLayers = layerIndex - 1;
+			const auto& layer = layers->array[indexInLayers];
+			if (layer.type != resprite::JsonValue::Type::Object) continue;
+			const auto* group = resprite::member(layer, "isGroup");
+			if (group && group->type == resprite::JsonValue::Type::Boolean && group->boolean) continue;
+			const auto* kind = resprite::member(layer, "layerKind");
+			if (kind && kind->type == resprite::JsonValue::Type::String && kind->string != "raster") continue;
+			const auto* blend = resprite::member(layer, "blendMode");
+			if (blend && blend->type == resprite::JsonValue::Type::String && blend->string != "bm-normal")
+			{
+				global::error = "Resprite blend modes other than normal are not supported";
+				return false;
+			}
+
+			const auto* cells = resprite::member(layer, "cells");
+			if (!cells || cells->type != resprite::JsonValue::Type::Array || static_cast<size_t>(currentFrame) >= cells->array.size())
+			{
+				inherited[indexInLayers].hasSource = false;
+				continue;
+			}
+			const auto& cell = cells->array[currentFrame];
+			if (cell.type != resprite::JsonValue::Type::Object)
+			{
+				inherited[indexInLayers].hasSource = false;
+				continue;
+			}
+			auto& previous = inherited[indexInLayers];
+			const auto* inherit = resprite::member(cell, "inherit");
+			const bool isInherited = inherit && inherit->type == resprite::JsonValue::Type::Boolean && inherit->boolean;
+			int x = 0, y = 0;
+			if (isInherited)
+			{
+				if (!previous.hasSource) continue;
+				x = previous.x;
+				y = previous.y;
+				const auto* offset = resprite::member(cell, "inheritOffset");
+				const auto* offsetX = offset ? resprite::member(*offset, "x") : nullptr;
+				const auto* offsetY = offset ? resprite::member(*offset, "y") : nullptr;
+				int dx = 0, dy = 0;
+				if (offsetX && offsetY && resprite::integer(*offsetX, dx) && resprite::integer(*offsetY, dy))
+				{
+					const int64_t nextX = int64_t(previous.baseX) + dx;
+					const int64_t nextY = int64_t(previous.baseY) + dy;
+					if (nextX < std::numeric_limits<int>::min() || nextX > std::numeric_limits<int>::max()
+						|| nextY < std::numeric_limits<int>::min() || nextY > std::numeric_limits<int>::max())
+						continue;
+					x = static_cast<int>(nextX);
+					y = static_cast<int>(nextY);
+				}
+				previous.x = x;
+				previous.y = y;
+			}
+			else
+			{
+				const auto* id = resprite::member(cell, "id");
+				const auto* bounds = resprite::member(cell, "bounds");
+				const auto* origin = bounds ? resprite::member(*bounds, "origin") : nullptr;
+				const auto* originX = origin ? resprite::member(*origin, "x") : nullptr;
+				const auto* originY = origin ? resprite::member(*origin, "y") : nullptr;
+				if (!id || id->type != resprite::JsonValue::Type::String || !resprite::uuid(id->string)
+					|| !originX || !originY || !resprite::integer(*originX, x) || !resprite::integer(*originY, y))
+				{
+					previous.hasSource = false;
+					continue;
+				}
+				previous.id = id->string;
+				previous.baseX = previous.x = x;
+				previous.baseY = previous.y = y;
+				previous.hasSource = true;
+			}
+			const auto* cellOpacity = resprite::member(cell, "opacity");
+			if (!isInherited || cellOpacity) previous.opacity = resprite::opacity(cell, "opacity");
+			const auto* visible = resprite::member(layer, "contentVisible");
+			if (visible && visible->type == resprite::JsonValue::Type::Boolean && !visible->boolean) continue;
+			if (currentFrame != index) continue;
+
+			const std::string cellPath = document.prefix + "CellData/" + previous.id + ".png";
+			auto cached = decodedCells.find(cellPath);
+			if (cached == decodedCells.end())
+			{
+				auto png = cellFiles.find(cellPath);
+				if (png == cellFiles.end()) continue;
+				MemChunk pngData;
+				pngData.importMem(png->second.data(), static_cast<uint32_t>(png->second.size()));
+				SImage pngImage;
+				if (!pngImage.open(pngData) || pngImage.width() <= 0 || pngImage.height() <= 0 || pngImage.width() > 8192
+					|| pngImage.height() > 8192 || static_cast<uint64_t>(pngImage.width()) * pngImage.height() > 64ull * 1024 * 1024)
+					continue;
+				MemChunk rgba;
+				if (!pngImage.putRGBAData(rgba)) continue;
+				RasterCell raster;
+				raster.width = pngImage.width();
+				raster.height = pngImage.height();
+				raster.rgba.assign(rgba.data(), rgba.data() + rgba.size());
+				cached = decodedCells.emplace(cellPath, std::move(raster)).first;
+			}
+			const auto& raster = cached->second;
+			const unsigned layerOpacity = resprite::opacity(layer, "opacity");
+			const unsigned opacity = (layerOpacity * previous.opacity + 127) / 255;
+			const int64_t x0 = std::max<int64_t>(0, x), y0 = std::max<int64_t>(0, y);
+			const int64_t x1 = std::min<int64_t>(document.width, int64_t(x) + raster.width);
+			const int64_t y1 = std::min<int64_t>(document.height, int64_t(y) + raster.height);
+			for (int64_t py = y0; py < y1; ++py)
+			{
+				for (int64_t px = x0; px < x1; ++px)
+				{
+					const auto* src = raster.rgba.data() + (static_cast<size_t>(py - y) * raster.width + static_cast<size_t>(px - x)) * 4;
+					auto* dst = canvas.data() + (static_cast<size_t>(py) * document.width + static_cast<size_t>(px)) * 4;
+					const unsigned sa = (unsigned(src[3]) * opacity + 127) / 255;
+					if (sa == 0) continue;
+					const unsigned da = dst[3];
+					const unsigned outA = sa + (da * (255 - sa) + 127) / 255;
+					for (int channel = 0; channel < 3; ++channel)
+					{
+						const unsigned source = unsigned(src[channel]) * sa;
+						const unsigned dest = (unsigned(dst[channel]) * da * (255 - sa) + 127) / 255;
+						dst[channel] = outA ? static_cast<uint8_t>((source + dest + outA / 2) / outA) : 0;
+					}
+					dst[3] = static_cast<uint8_t>(outA);
+				}
+			}
+		}
+		}
+		image.create(document.width, document.height, SImage::Type::RGBA, nullptr, index, document.frames);
+		image.setXOffset(document.width / 2);
+		image.setYOffset(document.height);
+		memcpy(imageData(image), canvas.data(), canvas.size());
+		return true;
 	}
 };
 

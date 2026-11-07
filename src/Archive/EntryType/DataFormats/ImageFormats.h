@@ -50,6 +50,18 @@ public:
 	}
 };
 
+class RespriteDataFormat : public EntryDataFormat
+{
+public:
+	RespriteDataFormat() : EntryDataFormat("img_resprite") {}
+	~RespriteDataFormat() = default;
+
+	int isThisFormat(MemChunk& mc) override
+	{
+		return mc.size() >= 4 && mc.readL32(0) == 0x04034B50 ? MATCH_TRUE : MATCH_FALSE;
+	}
+};
+
 class BMPDataFormat : public EntryDataFormat
 {
 public:

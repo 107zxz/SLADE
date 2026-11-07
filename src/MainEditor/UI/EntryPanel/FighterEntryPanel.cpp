@@ -6,6 +6,9 @@
 #include "Main.h"
 #include "FighterEntryPanel.h"
 #include "App.h"
+#include "Archive/ArchiveEntry.h"
+#include "Archive/ArchiveManager.h"
+#include "Graphics/SImage/SImage.h"
 #include "Game/Game.h"
 #include "General/Misc.h"
 #include "General/ResourceManager.h"
@@ -14,6 +17,53 @@
 #include "UI/Controls/ZoomControl.h"
 
 using namespace slade;
+
+namespace
+{
+bool loadRespriteArchiveFrame(SImage& image, string_view sprite_name, Archive* priority)
+{
+	if (sprite_name.size() < 5 || !std::isalpha(static_cast<unsigned char>(sprite_name[4])))
+		return false;
+
+	const auto requested = strutil::upper(sprite_name);
+	const int  frame     = requested[4] - 'A';
+	if (frame < 0 || frame >= 29)
+		return false;
+
+	auto tryArchive = [&](Archive* archive) {
+		if (!archive || archive->formatId() != "zip")
+			return false;
+
+		string projectName;
+		if (auto* parentEntry = archive->parentEntry())
+			projectName = string{ parentEntry->nameNoExt() };
+		else
+			projectName = string{ strutil::Path::fileNameOf(archive->filename(), false) };
+		projectName = strutil::upper(projectName);
+		if (projectName.size() != requested.size() + 1 || projectName.compare(0, 4, requested, 0, 4) != 0
+			|| projectName[4] != 'A' || projectName.back() < '0' || projectName.back() > '8')
+			return false;
+
+		MemChunk projectData;
+		if (auto* parentEntry = archive->parentEntry())
+		{
+			if (!projectData.importMem(parentEntry->rawData(), parentEntry->size()))
+				return false;
+		}
+		else if (!projectData.importFile(archive->filename()))
+			return false;
+
+		return image.open(projectData, frame, "resprite");
+	};
+
+	if (tryArchive(priority))
+		return true;
+	for (const auto& archive : app::archiveManager().allArchives())
+		if (archive.get() != priority && tryArchive(archive.get()))
+			return true;
+	return tryArchive(app::archiveManager().baseResourceArchive());
+}
+} // namespace
 
 FighterEntryPanel::FighterEntryPanel(wxWindow* parent) : EntryPanel(parent, "fighter"), playback_timer_{ this }
 {
@@ -157,7 +207,21 @@ bool FighterEntryPanel::loadEntry(ArchiveEntry* entry)
 		return false;
 	}
 
-	for (const auto& [name, state] : definitions.classes().front().states().states())
+	const zscript::Class* fighter_class = &definitions.classes().front();
+	zscript::Definitions archive_definitions;
+	if (entry->parent())
+	{
+		archive_definitions.parseZScript(entry->parent());
+		auto it = std::find_if(
+			archive_definitions.classes().begin(),
+			archive_definitions.classes().end(),
+			[fighter_class](const auto& class_definition)
+			{ return strutil::equalCI(class_definition.name(), fighter_class->name()); });
+		if (it != archive_definitions.classes().end())
+			fighter_class = &*it;
+	}
+
+	for (const auto& [name, state] : fighter_class->states().states())
 	{
 		DisplayState display_state;
 		display_state.name = name;
@@ -178,7 +242,7 @@ bool FighterEntryPanel::loadEntry(ArchiveEntry* entry)
 		if (!display_state.frames.empty())
 			states_.push_back(std::move(display_state));
 	}
-	auto first_state    = definitions.classes().front().states().firstState();
+	auto first_state    = fighter_class->states().firstState();
 	auto first_state_it = std::find_if(
 		states_.begin(), states_.end(), [&first_state](const auto& state) { return state.name == first_state; });
 	if (first_state_it != states_.end())
@@ -192,7 +256,7 @@ bool FighterEntryPanel::loadEntry(ArchiveEntry* entry)
 	actor_scale_         = { 0.2, 0.2 };
 	actor_height_        = 53;
 	actor_radius_        = 12;
-	const auto& defaults = definitions.classes().front().defaultProperties();
+	const auto& defaults = fighter_class->defaultProperties();
 	if (const auto scale = defaults.getIf<string>("scale"))
 	{
 		strutil::toDouble(*scale, actor_scale_.x);
@@ -269,7 +333,11 @@ void FighterEntryPanel::updateFrame()
 		sprite_entry = app::resources().getPatchEntry(
 			sprite_name + rotation, "sprites", priority_archive_, &image_index);
 
-	if (sprite_entry && misc::loadImageFromEntry(&canvas_->image(), sprite_entry, image_index))
+	bool sprite_loaded = sprite_entry && misc::loadImageFromEntry(&canvas_->image(), sprite_entry, image_index);
+	if (!sprite_loaded)
+		sprite_loaded = loadRespriteArchiveFrame(canvas_->image(), sprite_name, priority_archive_);
+
+	if (sprite_loaded)
 	{
 		canvas_->setViewType(GfxCanvas::View::Sprite);
 		canvas_->setActorSpriteScale(actor_scale_.x, actor_scale_.y);
@@ -714,7 +782,9 @@ void FighterEntryPanel::setPlaying(bool playing)
 	if (frame_duration < 0)
 		return;
 
-	const auto duration_ms = static_cast<int>((static_cast<int64_t>(frame_duration) * 1000 + 17) / 35);
+	constexpr int tics_per_second = 60;
+	const auto    duration_ms = static_cast<int>(
+		(static_cast<int64_t>(frame_duration) * 1000 + tics_per_second / 2) / tics_per_second);
 	playback_timer_.StartOnce(std::max(1, duration_ms));
 }
 

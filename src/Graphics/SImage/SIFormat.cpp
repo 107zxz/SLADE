@@ -505,6 +505,7 @@ void SIFormat::initFormats()
 
 	// Image formats
 	new SIFAse();
+	new SIFResprite();
 	new SIFPng();
 
 	// Doom formats
