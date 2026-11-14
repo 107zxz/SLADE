@@ -2,7 +2,7 @@
 
 #include "EntryPanel.h"
 #include "Game/ZScript.h"
-#include "UI/Canvas/GfxCanvas.h"
+#include "UI/Canvas/GfxCanvasBase.h"
 
 namespace slade
 {
@@ -43,7 +43,7 @@ private:
 	Vec2d                actor_scale_      = { 0.2, 0.2 };
 	double               actor_height_     = 53;
 	double               actor_radius_     = 16;
-	GfxCanvas*           canvas_           = nullptr;
+	GfxCanvasBase*       canvas_           = nullptr;
 	wxChoice*            choice_state_     = nullptr;
 	wxButton*            button_prev_      = nullptr;
 	wxButton*            button_next_      = nullptr;

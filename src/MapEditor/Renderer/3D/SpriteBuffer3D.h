@@ -1,0 +1,55 @@
+#pragma once
+
+#include "OpenGL/Buffer.h"
+
+namespace slade::gl
+{
+class Camera;
+class View;
+} // namespace slade::gl
+
+namespace slade::mapeditor
+{
+class SpriteBuffer3D
+{
+public:
+	SpriteBuffer3D();
+	~SpriteBuffer3D();
+
+	void add(
+		const glm::vec3& position,
+		float brightness,
+		const glm::vec4& colour = glm::vec4{ 1.0f },
+		const glm::vec2& direction = glm::vec2{ 0.0f });
+	void push(bool clear = true);
+	void draw() const;
+
+private:
+	struct Instance
+	{
+		glm::vec3 position;
+		float     brightness;
+		glm::vec4 colour;
+		glm::vec2 direction;
+
+		Instance(
+			const glm::vec3& pos,
+			float brightness,
+			const glm::vec4& colour = glm::vec4{ 1.0f },
+			const glm::vec2& direction = glm::vec2{ 0.0f }) :
+			position{ pos },
+			brightness{ brightness },
+			colour{ colour },
+			direction{ direction }
+		{
+		}
+	};
+
+	vector<Instance>                  sprites_;
+	unsigned                          vao_ = 0;
+	unique_ptr<gl::Buffer<glm::vec2>> buffer_square_;
+	unique_ptr<gl::Buffer<Instance>>  buffer_sprites_;
+
+	void initVAO();
+};
+} // namespace slade::mapeditor

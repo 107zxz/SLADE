@@ -14,6 +14,8 @@
 #include "General/ResourceManager.h"
 #include "General/UI.h"
 #include "MainEditor/MainEditor.h"
+#include "UI/Canvas/Canvas.h"
+#include "UI/Canvas/GfxCanvasBase.h"
 #include "UI/Controls/ZoomControl.h"
 
 using namespace slade;
@@ -71,11 +73,12 @@ FighterEntryPanel::FighterEntryPanel(wxWindow* parent) : EntryPanel(parent, "fig
 	view_as_group->addActionButton("arch_view_text", "", true);
 	toolbar_->addGroup(view_as_group);
 
-	canvas_ = new GfxCanvas(this, -1);
-	canvas_->setViewType(GfxCanvas::View::Sprite);
+	canvas_ = ui::createGfxCanvas(this);
+	canvas_->setViewType(GfxView::Sprite);
 	canvas_->allowScroll(true);
+	canvas_->showBorder(true);
 	canvas_->setPalette(maineditor::currentPalette());
-	sizer_main_->Add(canvas_, 1, wxEXPAND);
+	sizer_main_->Add(canvas_->window(), 1, wxEXPAND);
 
 	choice_state_         = new wxChoice(this, -1);
 	button_prev_          = new wxButton(this, wxID_ANY, wxS("Previous"));
@@ -339,7 +342,7 @@ void FighterEntryPanel::updateFrame()
 
 	if (sprite_loaded)
 	{
-		canvas_->setViewType(GfxCanvas::View::Sprite);
+		canvas_->setViewType(GfxView::Sprite);
 		canvas_->setActorSpriteScale(actor_scale_.x, actor_scale_.y);
 		canvas_->setActorBoundsBox(radius, height);
 		canvas_->setHitLineOrigin(0, -height / (2.0 * actor_scale_.y));
@@ -362,7 +365,7 @@ void FighterEntryPanel::updateFrame()
 			static_cast<unsigned long>(current_frame_ + 1),
 			static_cast<unsigned long>(state.frames.size())));
 
-	canvas_->Refresh();
+	canvas_->window()->Refresh();
 }
 
 void FighterEntryPanel::updateHitLineInfo()
@@ -390,7 +393,7 @@ void FighterEntryPanel::updateHitLineInfo()
 	}
 
 	const auto text_colour = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
-	const auto colour      = selected_hit_line ? GfxCanvas::hitLineColour(selected_index).toWx() : text_colour;
+	const auto colour      = selected_hit_line ? GfxCanvasBase::hitLineColour(selected_index).toWx() : text_colour;
 	choice_hit_line_->SetForegroundColour(colour);
 	label_hit_line_->SetForegroundColour(colour);
 	if (selected_hit_line)
@@ -461,7 +464,7 @@ void FighterEntryPanel::updateHitLineOverlays()
 	if (current_frame_ >= state.frames.size())
 		return;
 
-	vector<GfxCanvas::HitLine> hit_lines;
+	vector<GfxCanvasBase::HitLine> hit_lines;
 	for (const auto& hit_line : state.frames[current_frame_].hit_lines)
 		hit_lines.push_back({ hit_line.length, hit_line.x, hit_line.y });
 	canvas_->setHitLineOverlays(hit_lines);

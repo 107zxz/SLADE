@@ -166,6 +166,7 @@ namespace zscript
 			vector<HitLine> hit_lines;
 			vector<SizeChange> size_changes;
 			unsigned hit_line_insert_pos = 0;
+			string light;
 		};
 
 		string editorSprite();

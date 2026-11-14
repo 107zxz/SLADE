@@ -816,19 +816,34 @@ bool StateTable::parse(ParsedStatement& states)
 		if (index + 2 < statement.tokens.size())
 		{
 			// Parse duration
-			int duration = 0;
+			int      duration    = 0;
+			unsigned idx_command = index + 3;
 			if (statement.tokens[index + 2] == '-' && index + 3 < statement.tokens.size())
 			{
 				// Negative number
 				strutil::toInt(statement.tokens[index + 3], duration);
-				duration = -duration;
+				duration    = -duration;
+				idx_command = index + 4;
 			}
 			else
 				strutil::toInt(statement.tokens[index + 2], duration);
 
+			// Check for a light() state command
+			string light;
+			for (auto a = idx_command; a < statement.tokens.size(); ++a)
+			{
+				if (a + 2 < statement.tokens.size() && strutil::equalCI(statement.tokens[a], "light")
+					&& statement.tokens[a + 1] == "(")
+				{
+					light = statement.tokens[a + 2];
+					break;
+				}
+			}
+
 			for (auto& state : current_states)
 			{
 				State::Frame frame{ statement.tokens[index], statement.tokens[index + 1], duration };
+				frame.light = light;
 				frame.duration_source = statement.entry;
 				if (index + 2 < statement.token_ranges.size())
 				{
@@ -1394,6 +1409,10 @@ bool ParsedStatement::parse(Tokenizer& tz)
 		tokens.emplace_back(tz.current().text);
 		token_ranges.push_back({ tz.current().pos_start, tz.current().pos_end });
 		tz.adv();
+
+		// DB comments are standalone statements rather than part of their parent
+		if (strutil::startsWith(tokens.back(), editor_comment_prefix))
+			return true;
 	}
 
 	// Block
