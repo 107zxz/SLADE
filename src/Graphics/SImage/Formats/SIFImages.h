@@ -90,7 +90,7 @@ class SIFAse : public SIFormat
 public:
 	SIFAse() : SIFormat("ase", "Aseprite", "ase", 255) {}
 
-	bool isThisFormat(MemChunk& mc) override
+	bool isThisFormat(const MemChunk& mc) override
 	{
 		if (mc.size() < 128)
 			return false;
@@ -104,7 +104,7 @@ public:
 		return magic == 0xA5E0 && frame_count > 0 && width > 0 && height > 0 && (depth == 8 || depth == 16 || depth == 32);
 	}
 
-	SImage::Info info(MemChunk& mc, int index) override
+	SImage::Info info(const MemChunk& mc, int index) override
 	{
 		SImage::Info inf;
 		inf.format     = "ase";
@@ -120,7 +120,7 @@ public:
 	}
 
 protected:
-	bool readImage(SImage& image, MemChunk& data, int index) override
+	bool readImage(SImage& image, const MemChunk& data, int index) override
 	{
 		ParsedAse parsed;
 		if (!parseAse(data, parsed))
@@ -187,7 +187,7 @@ private:
 				frame.resize(layer_count);
 	}
 
-	bool parseAse(MemChunk& mc, ParsedAse& parsed) const
+	bool parseAse(const MemChunk& mc, ParsedAse& parsed) const
 	{
 		if (mc.size() < 128 || mc.readL16(4) != 0xA5E0)
 		{
@@ -738,7 +738,7 @@ struct Document
 	JsonValue json;
 };
 
-bool readArchive(MemChunk& data, Document& parsed, std::map<std::string, std::vector<uint8_t>>* cells = nullptr)
+bool readArchive(const MemChunk& data, Document& parsed, std::map<std::string, std::vector<uint8_t>>* cells = nullptr)
 {
 	if (data.size() < 4 || data.readL32(0) != 0x04034B50) return false;
 	wxMemoryInputStream input(data.data(), data.size());
@@ -829,13 +829,13 @@ class SIFResprite : public SIFormat
 public:
 	SIFResprite() : SIFormat("resprite", "Resprite", "resprite", 255) {}
 
-	bool isThisFormat(MemChunk& data) override
+	bool isThisFormat(const MemChunk& data) override
 	{
 		resprite::Document document;
 		return resprite::readArchive(data, document);
 	}
 
-	SImage::Info info(MemChunk& data, int index) override
+	SImage::Info info(const MemChunk& data, int index) override
 	{
 		SImage::Info result;
 		result.format = "resprite";
@@ -853,7 +853,7 @@ public:
 	}
 
 protected:
-	bool readImage(SImage& image, MemChunk& data, int index) override
+	bool readImage(SImage& image, const MemChunk& data, int index) override
 	{
 		resprite::Document document;
 		std::map<std::string, std::vector<uint8_t>> cellFiles;

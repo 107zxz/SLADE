@@ -6,17 +6,21 @@
 #include "Main.h"
 #include "FighterEntryPanel.h"
 #include "App.h"
+#include "Archive/Archive.h"
 #include "Archive/ArchiveEntry.h"
 #include "Archive/ArchiveManager.h"
 #include "Graphics/SImage/SImage.h"
+#include "Utility/Colour.h"
+#include "Utility/StringUtils.h"
 #include "Game/Game.h"
 #include "General/Misc.h"
 #include "General/ResourceManager.h"
-#include "General/UI.h"
+#include "UI/UI.h"
 #include "MainEditor/MainEditor.h"
 #include "UI/Canvas/Canvas.h"
 #include "UI/Canvas/GfxCanvasBase.h"
 #include "UI/Controls/ZoomControl.h"
+#include "UI/SAuiToolBar.h"
 
 using namespace slade;
 
@@ -69,9 +73,7 @@ bool loadRespriteArchiveFrame(SImage& image, string_view sprite_name, Archive* p
 
 FighterEntryPanel::FighterEntryPanel(wxWindow* parent) : EntryPanel(parent, "fighter"), playback_timer_{ this }
 {
-	auto view_as_group = new SToolBarGroup(toolbar_, "View As");
-	view_as_group->addActionButton("arch_view_text", "", true);
-	toolbar_->addGroup(view_as_group);
+	toolbar_->loadLayoutFromResource("entry_fighter_top");
 
 	canvas_ = ui::createGfxCanvas(this);
 	canvas_->setViewType(GfxView::Sprite);
@@ -393,7 +395,7 @@ void FighterEntryPanel::updateHitLineInfo()
 	}
 
 	const auto text_colour = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
-	const auto colour      = selected_hit_line ? GfxCanvasBase::hitLineColour(selected_index).toWx() : text_colour;
+	const auto colour      = selected_hit_line ? colour::toWx(GfxCanvasBase::hitLineColour(selected_index)) : text_colour;
 	choice_hit_line_->SetForegroundColour(colour);
 	label_hit_line_->SetForegroundColour(colour);
 	if (selected_hit_line)
@@ -759,8 +761,8 @@ bool FighterEntryPanel::writeEntry(ArchiveEntry& entry)
 		return true;
 	if (!entry.importMem(updated_text.data(), updated_text.size()))
 		return false;
-	if (entry.state() == ArchiveEntry::State::Unmodified)
-		entry.setState(ArchiveEntry::State::Modified);
+	if (entry.state() == EntryState::Unmodified)
+		entry.setState(EntryState::Modified);
 	game::updateCustomDefinitions();
 	return true;
 }

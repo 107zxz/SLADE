@@ -2,6 +2,7 @@
 
 #include "ThingType.h"
 #include "Utility/Property.h"
+#include "Utility/PropertyList.h"
 
 namespace slade
 {

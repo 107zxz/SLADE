@@ -154,7 +154,7 @@ Vec2f wallSpriteDirection(const MapThing& thing, const game::ThingType& type_inf
 {
 	if (type_info.wallSprite() && !icon)
 	{
-		auto facing = math::vectorAngle(math::degToRad(thing.angle()));
+		auto facing = geometry::vectorAngle(geometry::degToRad(thing.angle()));
 		return { -facing.y, facing.x };
 	}
 

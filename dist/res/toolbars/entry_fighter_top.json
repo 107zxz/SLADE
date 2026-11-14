@@ -1,0 +1,5 @@
+{
+  "items": [
+    { "type": "action", "id": "arch_view_text", "show_text": true }
+  ]
+}

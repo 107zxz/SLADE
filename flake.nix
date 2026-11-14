@@ -44,9 +44,13 @@
               fluidsynth
               freetype
               ftgl
+              glm
               libGL
               libGLU
+              libarchive
+              libX11
               libwebp
+              libxmp
               lua5_4
               mpg123
               sfml

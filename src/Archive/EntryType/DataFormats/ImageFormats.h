@@ -29,7 +29,7 @@ public:
 	AseDataFormat() : EntryDataFormat("img_ase") {}
 	~AseDataFormat() = default;
 
-	int isThisFormat(MemChunk& mc) override
+	int isThisFormat(const MemChunk& mc) override
 	{
 		if (mc.size() < 128)
 			return MATCH_FALSE;
@@ -56,7 +56,7 @@ public:
 	RespriteDataFormat() : EntryDataFormat("img_resprite") {}
 	~RespriteDataFormat() = default;
 
-	int isThisFormat(MemChunk& mc) override
+	int isThisFormat(const MemChunk& mc) override
 	{
 		return mc.size() >= 4 && mc.readL32(0) == 0x04034B50 ? MATCH_TRUE : MATCH_FALSE;
 	}
