@@ -41,6 +41,7 @@
 
             buildInputs = with pkgs; [
               bzip2
+              cpptrace
               fluidsynth
               freetype
               ftgl
@@ -52,6 +53,8 @@
               libwebp
               libxmp
               lua5_4
+              md4c
+              nlohmann_json
               mpg123
               sfml
               wxGTK33
@@ -60,6 +63,7 @@
 
             cmakeFlags = [
               "-DNO_WEBVIEW=ON"
+              "-DSLADE_USE_SYSTEM_DEPS=ON"
               "-DwxWidgets_CONFIG_EXECUTABLE=${pkgs.wxGTK33}/bin/wx-config"
             ];
 
@@ -98,6 +102,7 @@
               cmake -S . -B build \
                 -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
                 -DNO_WEBVIEW=ON \
+                -DSLADE_USE_SYSTEM_DEPS=ON \
                 -DwxWidgets_CONFIG_EXECUTABLE=${pkgs.wxGTK33}/bin/wx-config
             '';
           };

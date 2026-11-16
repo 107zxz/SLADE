@@ -42,13 +42,16 @@ find_package(libxmp CONFIG REQUIRED)
 find_package(LibArchive REQUIRED)
 
 # Cpptrace
-include(FetchContent)
-FetchContent_Declare(
-	cpptrace
-	GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
-	GIT_TAG v1.0.4
-)
-FetchContent_MakeAvailable(cpptrace)
+find_package(cpptrace CONFIG QUIET)
+if (NOT cpptrace_FOUND)
+	include(FetchContent)
+	FetchContent_Declare(
+		cpptrace
+		GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
+		GIT_TAG v1.0.4
+	)
+	FetchContent_MakeAvailable(cpptrace)
+endif ()
 
 include_directories(
 	${FREETYPE_INCLUDE_DIRS}

@@ -6,6 +6,7 @@ option(NO_LUA "Disable Lua/Scripting features to reduce compile time" OFF)
 option(BUILD_PK3 "Build the SLADE pk3 file from dist/res" ON)
 option(BUILD_WX "Download and build wxWidgets instead of using system-installed libs" OFF)
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(SLADE_USE_SYSTEM_DEPS "Use system-installed JSON, Lua, and md4c libraries" OFF)
 
 # Skip the vcpkg wxwidgets package (the 'system-wx' default feature) when building wxWidgets ourselves
 if (BUILD_WX)

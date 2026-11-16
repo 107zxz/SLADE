@@ -38,35 +38,50 @@ set(SQLITECPP_RUN_CPPCHECK OFF CACHE BOOL "" FORCE)
 set(SQLITECPP_RUN_CPPLINT OFF CACHE BOOL "" FORCE)
 add_subdirectory(sqlitecpp)
 
-# JSON (nlohmann)
-include(FetchContent)
-FetchContent_Declare(json
-	URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
-	DOWNLOAD_EXTRACT_TIMESTAMP true
-)
-FetchContent_MakeAvailable(json)
-
-# Lua (via marovira/lua which provides the lua::lua target)
-if (NOT NO_LUA)
-	FetchContent_Declare(lua
-		GIT_REPOSITORY https://github.com/marovira/lua.git
-		GIT_TAG 5.5.1
+if (SLADE_USE_SYSTEM_DEPS)
+	find_package(nlohmann_json CONFIG REQUIRED)
+	find_package(md4c CONFIG REQUIRED)
+	if (NOT NO_LUA)
+		find_package(Lua REQUIRED)
+		add_library(lua::lua INTERFACE IMPORTED)
+		set_target_properties(lua::lua PROPERTIES
+			INTERFACE_INCLUDE_DIRECTORIES "${LUA_INCLUDE_DIR}"
+			INTERFACE_LINK_LIBRARIES "${LUA_LIBRARIES}"
+		)
+	endif ()
+	set(MD4C_HTML_TARGET md4c::md4c-html)
+else ()
+	# JSON (nlohmann)
+	include(FetchContent)
+	FetchContent_Declare(json
+		URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+		DOWNLOAD_EXTRACT_TIMESTAMP true
 	)
-	FetchContent_MakeAvailable(lua)
-endif ()
+	FetchContent_MakeAvailable(json)
 
-# md4c (for parsing Markdown to HTML)
-set(BUILD_MD2HTML_EXECUTABLE OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
-set(BUILD_SHARED_LIBS OFF)
-FetchContent_Declare(md4c
-	URL https://github.com/mity/md4c/archive/refs/tags/v0.6.0.tar.gz
-	DOWNLOAD_EXTRACT_TIMESTAMP true
-)
-FetchContent_MakeAvailable(md4c)
-set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED})
-target_include_directories(md4c INTERFACE $<BUILD_INTERFACE:${md4c_SOURCE_DIR}/src>)
-target_include_directories(md4c-html INTERFACE $<BUILD_INTERFACE:${md4c_SOURCE_DIR}/src>)
+	# Lua (via marovira/lua which provides the lua::lua target)
+	if (NOT NO_LUA)
+		FetchContent_Declare(lua
+			GIT_REPOSITORY https://github.com/marovira/lua.git
+			GIT_TAG 5.5.1
+		)
+		FetchContent_MakeAvailable(lua)
+	endif ()
+
+	# md4c (for parsing Markdown to HTML)
+	set(BUILD_MD2HTML_EXECUTABLE OFF CACHE BOOL "" FORCE)
+	set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
+	set(BUILD_SHARED_LIBS OFF)
+	FetchContent_Declare(md4c
+		URL https://github.com/mity/md4c/archive/refs/tags/v0.6.0.tar.gz
+		DOWNLOAD_EXTRACT_TIMESTAMP true
+	)
+	FetchContent_MakeAvailable(md4c)
+	set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED})
+	target_include_directories(md4c INTERFACE $<BUILD_INTERFACE:${md4c_SOURCE_DIR}/src>)
+	target_include_directories(md4c-html INTERFACE $<BUILD_INTERFACE:${md4c_SOURCE_DIR}/src>)
+	set(MD4C_HTML_TARGET md4c-html)
+endif ()
 
 add_library(external STATIC ${EXTERNAL_SOURCES})
 target_link_libraries(external
@@ -76,7 +91,7 @@ target_link_libraries(external
 	SQLiteCpp
 	sqlite3
 	nlohmann_json::nlohmann_json
-	md4c-html
+	${MD4C_HTML_TARGET}
 )
 if (NOT NO_LUA)
 	target_link_libraries(external lua::lua)

@@ -9,18 +9,18 @@
 #include "Archive/Archive.h"
 #include "Archive/ArchiveEntry.h"
 #include "Archive/ArchiveManager.h"
-#include "Graphics/SImage/SImage.h"
-#include "Utility/Colour.h"
-#include "Utility/StringUtils.h"
 #include "Game/Game.h"
 #include "General/Misc.h"
 #include "General/ResourceManager.h"
-#include "UI/UI.h"
+#include "Graphics/SImage/SImage.h"
 #include "MainEditor/MainEditor.h"
 #include "UI/Canvas/Canvas.h"
 #include "UI/Canvas/GfxCanvasBase.h"
 #include "UI/Controls/ZoomControl.h"
 #include "UI/SAuiToolBar.h"
+#include "UI/UI.h"
+#include "Utility/Colour.h"
+#include "Utility/StringUtils.h"
 
 using namespace slade;
 
@@ -36,7 +36,8 @@ bool loadRespriteArchiveFrame(SImage& image, string_view sprite_name, Archive* p
 	if (frame < 0 || frame >= 29)
 		return false;
 
-	auto tryArchive = [&](Archive* archive) {
+	auto tryArchive = [&](Archive* archive)
+	{
 		if (!archive || archive->formatId() != "zip")
 			return false;
 
@@ -46,8 +47,11 @@ bool loadRespriteArchiveFrame(SImage& image, string_view sprite_name, Archive* p
 		else
 			projectName = string{ strutil::Path::fileNameOf(archive->filename(), false) };
 		projectName = strutil::upper(projectName);
-		if (projectName.size() != requested.size() + 1 || projectName.compare(0, 4, requested, 0, 4) != 0
-			|| projectName[4] != 'A' || projectName.back() < '0' || projectName.back() > '8')
+		if (projectName.size() != requested.size() + 1
+			|| projectName.compare(0, 4, requested, 0, 4) != 0
+			|| projectName[4] != 'A'
+			|| projectName.back() < '0'
+			|| projectName.back() > '8')
 			return false;
 
 		MemChunk projectData;
@@ -82,17 +86,25 @@ FighterEntryPanel::FighterEntryPanel(wxWindow* parent) : EntryPanel(parent, "fig
 	canvas_->setPalette(maineditor::currentPalette());
 	sizer_main_->Add(canvas_->window(), 1, wxEXPAND);
 
-	choice_state_         = new wxChoice(this, -1);
-	button_prev_          = new wxButton(this, wxID_ANY, wxS("Previous"));
-	button_next_          = new wxButton(this, wxID_ANY, wxS("Next"));
-	button_play_          = new wxButton(this, wxID_ANY, wxS("Play"));
-	label_frame_             = new wxStaticText(this, wxID_ANY, wxEmptyString);
-	spin_frame_duration_     = new wxSpinCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(80, -1),
-		wxSP_ARROW_KEYS | wxTE_PROCESS_ENTER, -100000, 100000, 0);
-	choice_hit_line_         = new wxChoice(this, -1);
-	button_add_hit_line_     = new wxButton(this, wxID_ANY, wxS("Add"));
-	button_remove_hit_line_  = new wxButton(this, wxID_ANY, wxS("Remove"));
-	spin_hit_line_length_ = new wxSpinCtrlDouble(
+	choice_state_        = new wxChoice(this, -1);
+	button_prev_         = new wxButton(this, wxID_ANY, wxS("Previous"));
+	button_next_         = new wxButton(this, wxID_ANY, wxS("Next"));
+	button_play_         = new wxButton(this, wxID_ANY, wxS("Play"));
+	label_frame_         = new wxStaticText(this, wxID_ANY, wxEmptyString);
+	spin_frame_duration_ = new wxSpinCtrl(
+		this,
+		wxID_ANY,
+		wxEmptyString,
+		wxDefaultPosition,
+		wxSize(80, -1),
+		wxSP_ARROW_KEYS | wxTE_PROCESS_ENTER,
+		-100000,
+		100000,
+		0);
+	choice_hit_line_        = new wxChoice(this, -1);
+	button_add_hit_line_    = new wxButton(this, wxID_ANY, wxS("Add"));
+	button_remove_hit_line_ = new wxButton(this, wxID_ANY, wxS("Remove"));
+	spin_hit_line_length_   = new wxSpinCtrlDouble(
 		this,
 		-1,
 		wxEmptyString,
@@ -213,7 +225,7 @@ bool FighterEntryPanel::loadEntry(ArchiveEntry* entry)
 	}
 
 	const zscript::Class* fighter_class = &definitions.classes().front();
-	zscript::Definitions archive_definitions;
+	zscript::Definitions  archive_definitions;
 	if (entry->parent())
 	{
 		archive_definitions.parseZScript(entry->parent());
@@ -234,11 +246,11 @@ bool FighterEntryPanel::loadEntry(ArchiveEntry* entry)
 			for (const auto sprite_frame : frame.sprite_frame)
 			{
 				DisplayFrame display_frame{ frame.sprite_base, sprite_frame, frame.duration };
-				display_frame.original_duration = frame.duration;
-				display_frame.duration_range = frame.duration_range;
-				display_frame.duration_source = frame.duration_source;
+				display_frame.original_duration   = frame.duration;
+				display_frame.duration_range      = frame.duration_range;
+				display_frame.duration_source     = frame.duration_source;
 				display_frame.hit_line_insert_pos = frame.hit_line_insert_pos;
-				display_frame.size_changes = frame.size_changes;
+				display_frame.size_changes        = frame.size_changes;
 				for (const auto& hit_line : frame.hit_lines)
 					display_frame.hit_lines.push_back(hit_line);
 				display_state.frames.push_back(std::move(display_frame));
@@ -299,7 +311,7 @@ void FighterEntryPanel::updateFrame()
 	if (state.frames.empty())
 		return;
 	current_frame_ %= state.frames.size();
-	const auto& frame = state.frames[current_frame_];
+	const auto& frame  = state.frames[current_frame_];
 	double      radius = actor_radius_;
 	double      height = actor_height_;
 	for (size_t i = 0; i <= current_frame_; ++i)
@@ -313,9 +325,9 @@ void FighterEntryPanel::updateFrame()
 	updating_frame_duration_ = true;
 	spin_frame_duration_->SetValue(frame.duration);
 	spin_frame_duration_->Enable(
-			frame.duration_source == source_entry_ && frame.duration_range.end > frame.duration_range.start);
+		frame.duration_source == source_entry_ && frame.duration_range.end > frame.duration_range.start);
 	updating_frame_duration_ = false;
-	current_hit_line_ = 0;
+	current_hit_line_        = 0;
 	choice_hit_line_->Clear();
 	for (size_t i = 0; i < frame.hit_lines.size(); ++i)
 		choice_hit_line_->Append(WX_FMT("{}", static_cast<unsigned long>(i + 1)));
@@ -346,7 +358,7 @@ void FighterEntryPanel::updateFrame()
 	{
 		canvas_->setViewType(GfxView::Sprite);
 		canvas_->setActorSpriteScale(actor_scale_.x, actor_scale_.y);
-		canvas_->setActorBoundsBox(radius, height);
+		canvas_->setActorBoundsBox(radius / actor_scale_.x, height / actor_scale_.y);
 		canvas_->setHitLineOrigin(0, -height / (2.0 * actor_scale_.y));
 		updateHitLineOverlays();
 		canvas_->zoomToFit(true, 0.1);
@@ -395,7 +407,7 @@ void FighterEntryPanel::updateHitLineInfo()
 	}
 
 	const auto text_colour = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
-	const auto colour      = selected_hit_line ? colour::toWx(GfxCanvasBase::hitLineColour(selected_index)) : text_colour;
+	const auto colour = selected_hit_line ? colour::toWx(GfxCanvasBase::hitLineColour(selected_index)) : text_colour;
 	choice_hit_line_->SetForegroundColour(colour);
 	label_hit_line_->SetForegroundColour(colour);
 	if (selected_hit_line)
@@ -405,7 +417,8 @@ void FighterEntryPanel::updateHitLineInfo()
 		spin_hit_line_x_->SetValue(selected_hit_line->x);
 		spin_hit_line_y_->SetValue(selected_hit_line->y);
 		button_remove_hit_line_->Enable(
-			selected_hit_line->added || (can_edit && selected_hit_line->call_range.end > selected_hit_line->call_range.start));
+			selected_hit_line->added
+			|| (can_edit && selected_hit_line->call_range.end > selected_hit_line->call_range.start));
 		spin_hit_line_length_->Enable(can_edit);
 		spin_hit_line_x_->Enable(can_edit);
 		spin_hit_line_y_->Enable(can_edit);
@@ -492,7 +505,8 @@ void FighterEntryPanel::onHitLineValueChanged(wxCommandEvent& e)
 		for (auto& sibling_state : states_)
 			for (auto& sibling_frame : sibling_state.frames)
 				for (auto& sibling_line : sibling_frame.hit_lines)
-					if (!sibling_line.added && sibling_line.source == hit_line.source
+					if (!sibling_line.added
+						&& sibling_line.source == hit_line.source
 						&& sibling_line.length_range.start == hit_line.length_range.start
 						&& sibling_line.x_range.start == hit_line.x_range.start
 						&& sibling_line.y_range.start == hit_line.y_range.start)
@@ -574,7 +588,7 @@ void FighterEntryPanel::onRemoveHitLine(wxCommandEvent& e)
 	auto& state = states_[choice_state_->GetSelection()];
 	if (current_frame_ >= state.frames.size())
 		return;
-	auto& hit_lines = state.frames[current_frame_].hit_lines;
+	auto&      hit_lines = state.frames[current_frame_].hit_lines;
 	const auto selection = choice_hit_line_->GetSelection();
 	if (selection < 0 || static_cast<size_t>(selection) >= hit_lines.size())
 		return;
@@ -604,9 +618,10 @@ void FighterEntryPanel::onRemoveHitLine(wxCommandEvent& e)
 						sibling_lines.end(),
 						[&removed_line](const auto& line)
 						{
-							return !line.added && line.source == removed_line.source
-								&& line.call_range.start == removed_line.call_range.start
-								&& line.call_range.end == removed_line.call_range.end;
+							return !line.added
+								   && line.source == removed_line.source
+								   && line.call_range.start == removed_line.call_range.start
+								   && line.call_range.end == removed_line.call_range.end;
 						}),
 					sibling_lines.end());
 			}
@@ -690,7 +705,8 @@ bool FighterEntryPanel::writeEntry(ArchiveEntry& entry)
 	for (const auto& state : states_)
 		for (const auto& frame : state.frames)
 		{
-			if (frame.duration != frame.original_duration && frame.duration_source == source_entry_
+			if (frame.duration != frame.original_duration
+				&& frame.duration_source == source_entry_
 				&& frame.duration_range.end > frame.duration_range.start)
 				replacements.push_back(
 					{ frame.duration_range.start, frame.duration_range.end, fmt::format("{}", frame.duration) });
@@ -788,7 +804,7 @@ void FighterEntryPanel::setPlaying(bool playing)
 		return;
 
 	constexpr int tics_per_second = 60;
-	const auto    duration_ms = static_cast<int>(
+	const auto    duration_ms     = static_cast<int>(
 		(static_cast<int64_t>(frame_duration) * 1000 + tics_per_second / 2) / tics_per_second);
 	playback_timer_.StartOnce(std::max(1, duration_ms));
 }
