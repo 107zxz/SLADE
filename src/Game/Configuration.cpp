@@ -310,16 +310,38 @@ const string& Configuration::mapName(unsigned index)
 // -----------------------------------------------------------------------------
 Configuration::MapConf Configuration::mapInfo(string_view mapname)
 {
+	MapConf result;
 	for (auto& map : maps_)
 	{
 		if (strutil::equalCI(map.mapname, mapname))
-			return map;
+		{
+			result = map;
+			break;
+		}
+	}
+	if (result.mapname.empty() && !maps_.empty())
+		result = maps_[0];
+
+	// Overlay sky names from the parsed MAPINFO definitions. These take
+	// precedence over the editor's built-in per-map defaults.
+	if (map_info_->hasMap(mapname))
+	{
+		const auto& map = map_info_->getMap(mapname);
+		if (map.sky1_defined)
+			result.sky1 = map.sky1;
+		if (map.sky2_defined)
+			result.sky2 = map.sky2;
+	}
+	else if (map_info_->hasDefaultMap())
+	{
+		const auto& map = map_info_->defaultMap();
+		if (map.sky1_defined)
+			result.sky1 = map.sky1;
+		if (map.sky2_defined)
+			result.sky2 = map.sky2;
 	}
 
-	if (!maps_.empty())
-		return maps_[0];
-	else
-		return {};
+	return result;
 }
 
 // -----------------------------------------------------------------------------

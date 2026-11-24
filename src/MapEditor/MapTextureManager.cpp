@@ -194,8 +194,10 @@ const MapTextureManager::Texture& MapTextureManager::texture(string_view name, b
 		}
 	}
 
-	// No composite match, look for stand-alone textures
-	else
+	// If no composite texture could be built, look for stand-alone textures.
+	// A matching composite definition can still fail to load (for example if its
+	// patches are unsupported), so don't let its presence block this fallback.
+	if (!mtex.gl_id)
 	{
 		// HIRES
 		if (auto* etex = app::resources().getHiresEntry(name, archive))
@@ -230,6 +232,16 @@ const MapTextureManager::Texture& MapTextureManager::texture(string_view name, b
 			etex = app::resources().getTextureEntry(name, "textures", archive);
 			if (misc::loadImageFromEntry(&image, etex))
 				mtex.gl_id = gl::Texture::createFromImage(image, palette_.get(), filter);
+			else
+			{
+				// Sky textures are often supplied as standalone graphics in the patches
+				// namespace rather than as TEXTURES entries. This also handles animated
+				// image formats such as Resprite through ResourceManager's frame lookup.
+				int image_index = 0;
+				auto* patch = app::resources().getPatchEntry(name, "", archive, &image_index);
+				if (misc::loadImageFromEntry(&image, patch, image_index))
+					mtex.gl_id = gl::Texture::createFromImage(image, palette_.get(), filter);
+			}
 		}
 	}
 

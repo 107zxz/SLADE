@@ -16,8 +16,10 @@ namespace game
 			string  entry_name;
 			int     level_num         = 0;
 			string  sky1              = "SKY1";
+			bool    sky1_defined      = false;
 			float   sky1_scroll_speed = 0.f;
 			string  sky2;
+			bool    sky2_defined         = false;
 			float   sky2_scroll_speed    = 0.f;
 			bool    sky_double           = false;
 			bool    sky_force_no_stretch = false;
@@ -61,6 +63,9 @@ namespace game
 		// Maps access
 		const vector<Map>& maps() const { return maps_; }
 		Map&               getMap(string_view name);
+		bool               hasMap(string_view name) const;
+		bool               hasDefaultMap() const { return default_map_defined_; }
+		const Map&         defaultMap() const { return default_map_; }
 		bool               addOrUpdateMap(const Map& map);
 
 		// DoomEdNum access
@@ -89,6 +94,7 @@ namespace game
 	private:
 		vector<Map>  maps_;
 		Map          default_map_;
+		bool         default_map_defined_ = false;
 		DoomEdNumMap editor_nums_;
 	};
 } // namespace game

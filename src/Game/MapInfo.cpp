@@ -57,7 +57,8 @@ void MapInfo::clear(bool maps, bool editor_nums)
 	if (maps)
 	{
 		maps_.clear();
-		default_map_ = {};
+		default_map_         = {};
+		default_map_defined_ = false;
 	}
 
 	if (editor_nums)
@@ -70,10 +71,19 @@ void MapInfo::clear(bool maps, bool editor_nums)
 MapInfo::Map& MapInfo::getMap(string_view name)
 {
 	for (auto& map : maps_)
-		if (map.entry_name == name)
+		if (strutil::equalCI(map.entry_name, name))
 			return map;
 
 	return default_map_;
+}
+
+// -----------------------------------------------------------------------------
+// Returns whether a map-specific definition exists for [name]
+// -----------------------------------------------------------------------------
+bool MapInfo::hasMap(string_view name) const
+{
+	return std::any_of(maps_.begin(), maps_.end(),
+		[name](const auto& map) { return strutil::equalCI(map.entry_name, name); });
 }
 
 // -----------------------------------------------------------------------------
@@ -275,7 +285,7 @@ bool MapInfo::parseZMap(Tokenizer& tz, string_view type)
 
 	// Normal map, get lump/name/etc
 	tz.adv();
-	if (type == "map")
+	if (strutil::equalCI(type, "map"))
 	{
 		// Entry name should be just after map keyword
 		map.entry_name = tz.current().text;
@@ -325,7 +335,8 @@ bool MapInfo::parseZMap(Tokenizer& tz, string_view type)
 			if (!checkEqualsToken(tz, "ZMapInfo"))
 				return false;
 
-			map.sky1 = tz.next().text;
+			map.sky1         = tz.next().text;
+			map.sky1_defined = true;
 
 			// Scroll speed
 			// TODO: Checks
@@ -339,7 +350,8 @@ bool MapInfo::parseZMap(Tokenizer& tz, string_view type)
 			if (!checkEqualsToken(tz, "ZMapInfo"))
 				return false;
 
-			map.sky2 = tz.next().text;
+			map.sky2         = tz.next().text;
+			map.sky2_defined = true;
 
 			// Scroll speed
 			// TODO: Checks
@@ -353,7 +365,8 @@ bool MapInfo::parseZMap(Tokenizer& tz, string_view type)
 			if (!checkEqualsToken(tz, "ZMapInfo"))
 				return false;
 
-			map.sky1 = tz.next().text;
+			map.sky1         = tz.next().text;
+			map.sky1_defined = true;
 		}
 
 		// DoubleSky
@@ -426,7 +439,7 @@ bool MapInfo::parseZMap(Tokenizer& tz, string_view type)
 		tz.adv();
 	}
 
-	if (type == "map")
+	if (strutil::equalCI(type, "map"))
 	{
 		log::info(2, "Parsed ZMapInfo Map {} ({}) successfully", map.entry_name, map.name);
 
@@ -444,8 +457,11 @@ bool MapInfo::parseZMap(Tokenizer& tz, string_view type)
 		if (!updated)
 			maps_.push_back(map);
 	}
-	else if (type == "defaultmap")
-		default_map_ = map;
+	else if (strutil::equalCI(type, "defaultmap"))
+	{
+		default_map_         = map;
+		default_map_defined_ = true;
+	}
 
 	return true;
 }
